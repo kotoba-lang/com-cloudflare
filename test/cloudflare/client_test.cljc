@@ -1,0 +1,58 @@
+(ns cloudflare.client-test
+  (:require [clojure.test :refer [deftest is testing]]
+            [cloudflare.client :as client]))
+
+(defn- stub-http-fn [status body]
+  (fn [_req] {:status status :body body}))
+
+(deftest graphql-posts-to-the-analytics-endpoint-with-bearer-auth
+  (let [captured (atom nil)
+        http-fn (fn [req] (reset! captured req) {:status 200 :body "{\"data\":{},\"errors\":null}"})
+        resp (client/graphql! {:query "query{}" :variables {}} {:http-fn http-fn :token "test-token"})]
+    (is (= client/graphql-endpoint (:url @captured)))
+    (is (= :post (:method @captured)))
+    (is (= "Bearer test-token" (get (:headers @captured) "Authorization")))
+    (is (= {} (:data resp)))))
+
+(deftest graphql-throws-on-non-2xx-transport-status
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"Cloudflare GraphQL request failed"
+       (client/graphql! {:query "query{}"} {:http-fn (stub-http-fn 500 "{}") :token "t"}))))
+
+(deftest graphql-does-not-throw-on-a-graphql-level-error-only-a-transport-one
+  (testing "a 200 response with :errors is still returned, not thrown -- callers check :errors themselves"
+    (let [resp (client/graphql! {:query "query{}"}
+                                {:http-fn (stub-http-fn 200 "{\"data\":null,\"errors\":[{\"message\":\"bad\"}]}")
+                                 :token "t"})]
+      (is (seq (:errors resp))))))
+
+(deftest rest-unwraps-result-on-success
+  (let [http-fn (stub-http-fn 200 "{\"success\":true,\"result\":[{\"id\":\"z1\"}],\"errors\":[]}")]
+    (is (= [{:id "z1"}] (client/rest! "/zones" {:http-fn http-fn :token "t"})))))
+
+(deftest rest-throws-on-transport-non-2xx-or-cloudflare-level-failure
+  (testing "transport-level non-2xx"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"Cloudflare REST request failed"
+         (client/rest! "/zones" {:http-fn (stub-http-fn 401 "{\"success\":false,\"result\":null,\"errors\":[{\"message\":\"unauthorized\"}]}")
+                                 :token "t"}))))
+  (testing "200 transport but :success false"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"Cloudflare REST request failed"
+         (client/rest! "/zones" {:http-fn (stub-http-fn 200 "{\"success\":false,\"result\":null,\"errors\":[{\"message\":\"bad request\"}]}")
+                                 :token "t"})))))
+
+(deftest rest-builds-a-query-string-from-the-query-opt
+  (let [captured (atom nil)
+        http-fn (fn [req] (reset! captured req) {:status 200 :body "{\"success\":true,\"result\":[]}"})]
+    (client/rest! "/zones/z1/dns_records" {:http-fn http-fn :token "t" :query {:name "app.example.com"}})
+    (is (= "https://api.cloudflare.com/client/v4/zones/z1/dns_records?name=app.example.com" (:url @captured)))))
+
+(deftest api-token-fails-closed-without-env-or-explicit-token
+  (is (thrown-with-msg?
+       clojure.lang.ExceptionInfo
+       #"CLOUDFLARE_API_TOKEN is required"
+       (client/graphql! {:query "query{}"} {:http-fn (stub-http-fn 200 "{}")}))))
