@@ -54,6 +54,17 @@
     (is (= {"JP" 25 "CH" 25} (:by-country report)))
     (is (= {200 22 201 3 404 25} (:by-status report)))))
 
+(deftest path-report-rows-exposes-the-raw-per-group-facts
+  (let [body "{\"data\":{\"viewer\":{\"zones\":[{\"httpRequestsAdaptiveGroups\":[
+              {\"count\":22,\"dimensions\":{\"clientRequestPath\":\"/a\",\"clientDeviceType\":\"desktop\",\"clientCountryName\":\"JP\",\"edgeResponseStatus\":200}}
+              ]}]}},\"errors\":null}"
+        response (client/graphql! {} {:http-fn (stub-http-fn body) :token "t"})
+        rows (analytics/path-report-rows response)]
+    (is (= [{:path "/a" :device "desktop" :country "JP" :status 200 :count 22}] rows)))
+  (testing "nil on a GraphQL-level error, not an exception"
+    (let [response (client/graphql! {} {:http-fn (stub-http-fn "{\"data\":null,\"errors\":[{\"message\":\"bad\"}]}") :token "t"})]
+      (is (nil? (analytics/path-report-rows response))))))
+
 (deftest parse-report-surfaces-graphql-errors-instead-of-throwing
   (let [body "{\"data\":null,\"errors\":[{\"message\":\"cannot request a time range wider than 1d\"}]}"
         response (client/graphql! {} {:http-fn (stub-http-fn body) :token "t"})]

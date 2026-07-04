@@ -73,22 +73,40 @@
                 :uniques (reduce + (map :uniques days))
                 :bytes (reduce + (map :bytes days))}})))
 
+(defn path-report-rows
+  "The raw per-group rows behind a path-report! response, before any
+  tallying: [{:path :device :country :status :count} ...] or nil on a
+  GraphQL-level error. `parse-path-report`'s :by-path/:by-device/etc. maps
+  are a lossy summary of this -- a consumer that wants to persist/analyze
+  per-request-group facts (e.g. transacting them as datoms for later
+  Datalog queries, rather than only ever seeing pre-flattened aggregates)
+  should use this, not parse-path-report's tallies."
+  [response]
+  (when-not (seq (:errors response))
+    (->> (groups response "httpRequestsAdaptiveGroups")
+         (mapv (fn [r] {:path (get-in r [:dimensions :clientRequestPath])
+                       :device (get-in r [:dimensions :clientDeviceType])
+                       :country (get-in r [:dimensions :clientCountryName])
+                       :status (get-in r [:dimensions :edgeResponseStatus])
+                       :count (:count r)})))))
+
 (defn parse-path-report
   "{:ok? true :total :by-path :by-device :by-country :by-status} (each a
   {value -> count} map, tallied by summing :count across all matching
-  rows) or {:ok? false :errors [...]}."
+  rows) or {:ok? false :errors [...]}. A lossy summary of path-report-rows
+  -- a consumer that wants the underlying per-group facts (e.g. to persist
+  them, not just display a tally) should use path-report-rows instead."
   [response]
   (if-let [errors (seq (:errors response))]
     {:ok? false :errors errors}
-    (let [rows (groups response "httpRequestsAdaptiveGroups")
-          tally (fn [k] (reduce (fn [acc r] (update acc (get-in r [:dimensions k]) (fnil + 0) (:count r)))
-                                {} rows))]
+    (let [rows (path-report-rows response)
+          tally (fn [k] (reduce (fn [acc r] (update acc (get r k) (fnil + 0) (:count r))) {} rows))]
       {:ok? true
        :total (reduce + (map :count rows))
-       :by-path (tally :clientRequestPath)
-       :by-device (tally :clientDeviceType)
-       :by-country (tally :clientCountryName)
-       :by-status (tally :edgeResponseStatus)})))
+       :by-path (tally :path)
+       :by-device (tally :device)
+       :by-country (tally :country)
+       :by-status (tally :status)})))
 
 #?(:clj
 (defn daily-report!
