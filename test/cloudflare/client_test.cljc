@@ -16,7 +16,7 @@
 
 (deftest graphql-throws-on-non-2xx-transport-status
   (is (thrown-with-msg?
-       clojure.lang.ExceptionInfo
+       #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
        #"Cloudflare GraphQL request failed"
        (client/graphql! {:query "query{}"} {:http-fn (stub-http-fn 500 "{}") :token "t"}))))
 
@@ -34,13 +34,13 @@
 (deftest rest-throws-on-transport-non-2xx-or-cloudflare-level-failure
   (testing "transport-level non-2xx"
     (is (thrown-with-msg?
-         clojure.lang.ExceptionInfo
+         #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
          #"Cloudflare REST request failed"
          (client/rest! "/zones" {:http-fn (stub-http-fn 401 "{\"success\":false,\"result\":null,\"errors\":[{\"message\":\"unauthorized\"}]}")
                                  :token "t"}))))
   (testing "200 transport but :success false"
     (is (thrown-with-msg?
-         clojure.lang.ExceptionInfo
+         #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
          #"Cloudflare REST request failed"
          (client/rest! "/zones" {:http-fn (stub-http-fn 200 "{\"success\":false,\"result\":null,\"errors\":[{\"message\":\"bad request\"}]}")
                                  :token "t"})))))
@@ -53,6 +53,6 @@
 
 (deftest api-token-fails-closed-without-env-or-explicit-token
   (is (thrown-with-msg?
-       clojure.lang.ExceptionInfo
+       #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
        #"CLOUDFLARE_API_TOKEN is required"
        (client/graphql! {:query "query{}"} {:http-fn (stub-http-fn 200 "{}")}))))
