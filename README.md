@@ -28,6 +28,7 @@ cloudflare.zones       -- zone list, DNS records (read)
 cloudflare.workers     -- zone-scoped routes, account-scoped Custom Domains, worker scripts (read)
 cloudflare.pages       -- Pages projects + their bound domains (read)
 cloudflare.logpush     -- Logpush job management (list/create/delete) -- NOT log fetching/parsing, see below
+cloudflare.stream      -- Stream Live: live inputs (WHIP/RTMPS/SRT ingest) + RTMP live outputs (YouTube/Twitch fan-out)
 ```
 
 Query/request construction and response parsing are pure `.cljc`. The
@@ -57,6 +58,44 @@ stub, never only against a live account.
 ;; => [{:hostname "app.itonami.cloud" :service "local-murakumo" ...} ...]
 ;; -- the answer to "what actually serves this hostname" when DNS/Pages don't have it.
 ```
+
+### Stream Live — reaching YouTube Live / Twitch from a browser
+
+A browser cannot speak RTMP, so it cannot publish to YouTube Live or Twitch
+directly. A Cloudflare Stream **live input** accepts WHIP/WebRTC from the
+browser; **live outputs** attached to it make Cloudflare re-broadcast the
+same stream onward over RTMP. Pair this with
+[`kotoba-lang/webrtc`](https://github.com/kotoba-lang/webrtc)'s
+`kotoba.webrtc.whip` on the browser side.
+
+```clojure
+(require '[cloudflare.stream :as stream])
+
+(def input (stream/create-live-input! account-id {:name "babiniku-stage"}))
+;; => {:uid "..." :whip-url "https://customer-….cloudflarestream.com/…/webRTC/publish"
+;;     :whep-url ... :rtmps-url ... :rtmps-stream-key ... :raw {...}}
+
+(stream/create-live-output! account-id (:uid input)
+                            {:platform :youtube :stream-key key})   ; :twitch, or :url for anything else
+
+(println (stream/live-input-summary input))   ; credential-free, safe to log
+```
+
+`recording` defaults to `"off"`: recording turns every broadcast into
+stored minutes that keep billing after the stream ends.
+
+`validate-output` runs before any output is posted and rejects the ways a
+destination silently never connects — a non-RTMP scheme, a stream key with
+a pasted-in trailing newline (the RTMP handshake carries it verbatim), or
+the key already appended to the ingest URL. Stream keys are broadcast
+credentials, so nothing here ever renders one whole: `redact-key` shows
+four characters and a length, and `live-input-summary` redacts even the
+RTMPS key Cloudflare returns.
+
+Every `*-request` builder is pure `.cljc` returning `{:method :path :url
+:body}`, so ClojureScript and `nbb` callers — the provisioning script that
+already has the stream key in hand, for instance — can use them without a
+JVM; the `*!` fns are the JVM convenience layer over `client/rest!`.
 
 ## Logpush scope (honestly stated)
 
