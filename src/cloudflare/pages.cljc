@@ -1,7 +1,23 @@
 (ns cloudflare.pages
   "Cloudflare Pages projects and their bound domains (read-only). REST v4,
-  JVM-only."
-  (:require [cloudflare.client :as client]))
+  JVM-only.
+
+  W6 product-shell: pure REST paths via kotoba workers_path_core."
+  (:require [cloudflare.client :as client]
+            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+
+(def ^:private oid :workers-path)
+
+#?(:clj
+   (defn- o [export args]
+     (oracle/call oid export args)))
+
+(defn projects-path
+  "REST path for Pages projects under an account.
+   JVM: kotoba `pages-projects-path`."
+  [account-id]
+  #?(:clj (o 'pages-projects-path [(str account-id)])
+     :cljs (str "/accounts/" account-id "/pages/projects")))
 
 #?(:clj
 (defn projects
@@ -11,7 +27,7 @@
   covers Worker bindings; a hostname can be on either or neither)."
   ([account-id] (projects account-id {}))
   ([account-id http-opts]
-   (client/rest! (str "/accounts/" account-id "/pages/projects") http-opts))))
+   (client/rest! (projects-path account-id) http-opts))))
 
 #?(:clj
 (defn project-by-domain

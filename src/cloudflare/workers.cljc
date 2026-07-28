@@ -9,8 +9,38 @@
   out to be bound to the `local-murakumo` Worker's Custom Domain, not a
   zone-level route or a Pages custom domain (ADR-0010, 2026-07-04). Check
   `custom-domains` before assuming a hostname with no DNS/Pages hit is
-  unaccounted for."
-  (:require [cloudflare.client :as client]))
+  unaccounted for.
+
+  W6 product-shell: pure REST paths via kotoba workers_path_core."
+  (:require [cloudflare.client :as client]
+            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+
+(def ^:private oid :workers-path)
+
+#?(:clj
+   (defn- o [export args]
+     (oracle/call oid export args)))
+
+(defn zone-routes-path
+  "REST path for zone-level Worker routes.
+   JVM: kotoba `zone-routes-path`."
+  [zone-id]
+  #?(:clj (o 'zone-routes-path [(str zone-id)])
+     :cljs (str "/zones/" zone-id "/workers/routes")))
+
+(defn custom-domains-path
+  "REST path for account Workers Custom Domains.
+   JVM: kotoba `custom-domains-path`."
+  [account-id]
+  #?(:clj (o 'custom-domains-path [(str account-id)])
+     :cljs (str "/accounts/" account-id "/workers/domains")))
+
+(defn scripts-path
+  "REST path for account Worker scripts metadata.
+   JVM: kotoba `scripts-path`."
+  [account-id]
+  #?(:clj (o 'scripts-path [(str account-id)])
+     :cljs (str "/accounts/" account-id "/workers/scripts")))
 
 #?(:clj
 (defn zone-routes
@@ -19,7 +49,7 @@
   (see custom-domains) -- those are a newer, separate binding surface."
   ([zone-id] (zone-routes zone-id {}))
   ([zone-id http-opts]
-   (client/rest! (str "/zones/" zone-id "/workers/routes") http-opts))))
+   (client/rest! (zone-routes-path zone-id) http-opts))))
 
 #?(:clj
 (defn custom-domains
@@ -29,11 +59,11 @@
   no server-side filter param for this endpoint."
   ([account-id] (custom-domains account-id {}))
   ([account-id http-opts]
-   (client/rest! (str "/accounts/" account-id "/workers/domains") http-opts))))
+   (client/rest! (custom-domains-path account-id) http-opts))))
 
 #?(:clj
 (defn scripts
   "Worker scripts (metadata only, not source) for `account-id`."
   ([account-id] (scripts account-id {}))
   ([account-id http-opts]
-   (client/rest! (str "/accounts/" account-id "/workers/scripts") http-opts))))
+   (client/rest! (scripts-path account-id) http-opts))))

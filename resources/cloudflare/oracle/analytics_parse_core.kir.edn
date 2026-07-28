@@ -1,0 +1,98 @@
+{:format :kotoba.kir/v4,
+ :signature nil,
+ :functions
+ [{:name empty-string-tally,
+   :params [],
+   :result [:map :string :i64],
+   :effects #{},
+   :body (typed-map-new [:map :string :i64]),
+   :param-types []}
+  {:name empty-i64-tally,
+   :params [],
+   :result [:map :i64 :i64],
+   :effects #{},
+   :body (typed-map-new [:map :i64 :i64]),
+   :param-types []}
+  {:name string-tally-get,
+   :params [m k],
+   :result :i64,
+   :effects #{},
+   :body
+   (option-match
+    [:option :i64]
+    (typed-map-get [:map :string :i64] m k)
+    0
+    v
+    v),
+   :param-types [[:map :string :i64] :string]}
+  {:name string-tally-add,
+   :params [m k n],
+   :result [:map :string :i64],
+   :effects #{},
+   :body
+   (typed-map-assoc
+    [:map :string :i64]
+    m
+    k
+    (+ (string-tally-get m k) n)),
+   :param-types [[:map :string :i64] :string :i64]}
+  {:name i64-tally-get,
+   :params [m k],
+   :result :i64,
+   :effects #{},
+   :body
+   (option-match
+    [:option :i64]
+    (typed-map-get [:map :i64 :i64] m k)
+    0
+    v
+    v),
+   :param-types [[:map :i64 :i64] :i64]}
+  {:name i64-tally-add,
+   :params [m k n],
+   :result [:map :i64 :i64],
+   :effects #{},
+   :body
+   (typed-map-assoc [:map :i64 :i64] m k (+ (i64-tally-get m k) n)),
+   :param-types [[:map :i64 :i64] :i64 :i64]}
+  {:name sum2,
+   :params [a b],
+   :result :i64,
+   :effects #{},
+   :body (+ a b),
+   :param-types [:i64 :i64]}
+  {:name sum3,
+   :params [a b c],
+   :result :i64,
+   :effects #{},
+   :body (+ a (+ b c)),
+   :param-types [:i64 :i64 :i64]}
+  {:name sum4,
+   :params [a b c d],
+   :result :i64,
+   :effects #{},
+   :body (+ a (+ b (+ c d))),
+   :param-types [:i64 :i64 :i64 :i64]}
+  {:name report-ok?,
+   :params [has-errors],
+   :result :i64,
+   :effects #{},
+   :body (if (= has-errors 1) 0 1),
+   :param-types [:i64]}],
+ :oracle-value nil,
+ :schema-identities nil,
+ :exports
+ [empty-string-tally
+  empty-i64-tally
+  string-tally-get
+  string-tally-add
+  i64-tally-get
+  i64-tally-add
+  sum2
+  sum3
+  sum4
+  report-ok?],
+ :schemas nil,
+ :effects #{},
+ :blocks [],
+ :entry nil}

@@ -20,8 +20,35 @@
   real, but nothing in GraphQL Analytics could explain *why*. A Logpush
   job on the `http_requests` (or `workers_trace_events`, for Worker
   exceptions/logs specifically) dataset, once wired to a real destination,
-  is the concrete next step for that kind of investigation."
-  (:require [cloudflare.client :as client]))
+  is the concrete next step for that kind of investigation.
+
+  W6 product-shell: pure REST paths via kotoba logpush_path_core."
+  (:require [cloudflare.client :as client]
+            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+
+(def ^:private oid :logpush-path)
+
+#?(:clj
+   (defn- o [export args]
+     (oracle/call oid export args)))
+
+(defn datasets-path
+  "REST path for Logpush datasets. JVM: kotoba `datasets-path`."
+  [zone-id]
+  #?(:clj (o 'datasets-path [(str zone-id)])
+     :cljs (str "/zones/" zone-id "/logpush/datasets")))
+
+(defn jobs-path
+  "REST path for Logpush jobs collection. JVM: kotoba `jobs-path`."
+  [zone-id]
+  #?(:clj (o 'jobs-path [(str zone-id)])
+     :cljs (str "/zones/" zone-id "/logpush/jobs")))
+
+(defn job-path
+  "REST path for one Logpush job. JVM: kotoba `job-path`."
+  [zone-id job-id]
+  #?(:clj (o 'job-path [(str zone-id) (str job-id)])
+     :cljs (str "/zones/" zone-id "/logpush/jobs/" job-id)))
 
 #?(:clj
 (defn datasets
@@ -29,14 +56,14 @@
   \"workers_trace_events\", \"firewall_events\")."
   ([zone-id] (datasets zone-id {}))
   ([zone-id http-opts]
-   (client/rest! (str "/zones/" zone-id "/logpush/datasets") http-opts))))
+   (client/rest! (datasets-path zone-id) http-opts))))
 
 #?(:clj
 (defn jobs
   "Logpush jobs configured for `zone-id`."
   ([zone-id] (jobs zone-id {}))
   ([zone-id http-opts]
-   (client/rest! (str "/zones/" zone-id "/logpush/jobs") http-opts))))
+   (client/rest! (jobs-path zone-id) http-opts))))
 
 #?(:clj
 (defn create-job!
@@ -48,7 +75,7 @@
   ([zone-id dataset destination-conf] (create-job! zone-id dataset destination-conf {} {}))
   ([zone-id dataset destination-conf opts] (create-job! zone-id dataset destination-conf opts {}))
   ([zone-id dataset destination-conf opts http-opts]
-   (client/rest! (str "/zones/" zone-id "/logpush/jobs")
+   (client/rest! (jobs-path zone-id)
                 (assoc http-opts
                        :method :post
                        :body (merge {:dataset dataset :destination_conf destination-conf :enabled true} opts))))))
@@ -57,5 +84,5 @@
 (defn delete-job!
   ([zone-id job-id] (delete-job! zone-id job-id {}))
   ([zone-id job-id http-opts]
-   (client/rest! (str "/zones/" zone-id "/logpush/jobs/" job-id)
+   (client/rest! (job-path zone-id job-id)
                 (assoc http-opts :method :delete)))))

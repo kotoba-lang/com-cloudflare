@@ -1,0 +1,86 @@
+{:format :kotoba.kir/v4,
+ :signature nil,
+ :functions
+ [{:name list-zones-path,
+   :params [],
+   :result :string,
+   :effects #{},
+   :body "/zones",
+   :param-types []}
+  {:name list-zones-per-page,
+   :params [],
+   :result :string,
+   :effects #{},
+   :body "50",
+   :param-types []}
+  {:name query-pair,
+   :params [k v],
+   :result :string,
+   :effects #{},
+   :body (string-concat k (string-concat "=" v)),
+   :param-types [:string :string]}
+  {:name with-query,
+   :params [path qs],
+   :result :string,
+   :effects #{},
+   :body
+   (if
+    (string=? qs "")
+    path
+    (string-concat path (string-concat "?" qs))),
+   :param-types [:string :string]}
+  {:name list-zones-query,
+   :params [],
+   :result :string,
+   :effects #{},
+   :body (query-pair "per_page" (list-zones-per-page)),
+   :param-types []}
+  {:name list-zones-request-path,
+   :params [],
+   :result :string,
+   :effects #{},
+   :body (with-query (list-zones-path) (list-zones-query)),
+   :param-types []}
+  {:name dns-records-path,
+   :params [zone-id],
+   :result :string,
+   :effects #{},
+   :body
+   (string-concat "/zones/" (string-concat zone-id "/dns_records")),
+   :param-types [:string]}
+  {:name dns-name-query-pair,
+   :params [name],
+   :result :string,
+   :effects #{},
+   :body (query-pair "name" name),
+   :param-types [:string]}
+  {:name dns-records-path-with-name,
+   :params [zone-id name],
+   :result :string,
+   :effects #{},
+   :body
+   (with-query (dns-records-path zone-id) (dns-name-query-pair name)),
+   :param-types [:string :string]}
+  {:name hostname-matches?,
+   :params [expected actual],
+   :result :i64,
+   :effects #{},
+   :body (if (string=? expected actual) 1 0),
+   :param-types [:string :string]}],
+ :oracle-value nil,
+ :schema-identities nil,
+ :exports
+ [list-zones-path
+  list-zones-per-page
+  list-zones-query
+  list-zones-request-path
+  dns-records-path
+  dns-name-query-pair
+  dns-records-path-with-name
+  query-pair
+  with-query
+  hostname-matches?],
+ :schemas nil,
+ :effects #{},
+ :blocks [],
+ :entry nil}
