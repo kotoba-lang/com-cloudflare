@@ -37,6 +37,9 @@
                      :post (-> builder
                               (.POST (java.net.http.HttpRequest$BodyPublishers/ofString (or body "")))
                               .build)
+                     :put (-> builder
+                             (.PUT (java.net.http.HttpRequest$BodyPublishers/ofString (or body "")))
+                             .build)
                      :get (-> builder .GET .build)
                      :delete (-> builder .DELETE .build)
                      (throw (ex-info "Unsupported HTTP method" {:method method})))
@@ -90,9 +93,11 @@
                         :env-name api-token-env-name}))))))
 
 #?(:clj
-(defn- auth-headers [token]
-  {"Authorization" (str "Bearer " token)
-   "Content-Type" "application/json"}))
+(defn- auth-headers
+  ([token] (auth-headers token "application/json"))
+  ([token content-type]
+   (cond-> {"Authorization" (str "Bearer " token)}
+     content-type (assoc "Content-Type" content-type)))))
 
 #?(:clj
 (defn- resolve-token
@@ -130,13 +135,27 @@
 
   Auth: `:token` string, or `:fetch` kit-shaped secret getter (see api-token)."
   ([path] (rest! path {}))
-  ([path {:keys [method body http-fn query] :or {method :get http-fn (jvm-http-fn)} :as opts}]
+  ([path {:keys [method body http-fn query content-type raw-body?]
+          :or {method :get http-fn (jvm-http-fn) content-type "application/json"}
+          :as opts}]
    (let [query-string (when (seq query)
                         (str "?" (str/join "&" (map (fn [[k v]] (str (name k) "=" v)) query))))
+         ;; Deploy uploads may send raw JS (`raw-body?` true); default JSON-encodes maps.
+         body-str (cond
+                    (nil? body) nil
+                    raw-body? (str body)
+                    (string? body) body
+                    :else (json/write-str body))
+         ;; When content-type is application/javascript, treat string body as raw.
+         body-str (if (and (string? body)
+                           (not= content-type "application/json")
+                           (not raw-body?))
+                    (str body)
+                    body-str)
          resp (http-fn (cond-> {:url (str api-base path query-string)
                                 :method method
-                                :headers (auth-headers (resolve-token opts))}
-                        body (assoc :body (json/write-str body))))
+                                :headers (auth-headers (resolve-token opts) content-type)}
+                        body-str (assoc :body body-str)))
          parsed (json/read-str (:body resp) :key-fn keyword)]
      (when-not (and (< (:status resp) 300) (:success parsed))
        (throw (ex-info "Cloudflare REST request failed"
