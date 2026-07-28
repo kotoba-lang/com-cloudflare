@@ -19,40 +19,78 @@
   Live helpers are JVM-only thin wrappers around `client/rest!` + plans."
   (:require [clojure.string :as str]
             #?(:clj [cloudflare.client :as client])
-            #?(:clj [clojure.data.json :as json]))
+            #?(:clj [clojure.data.json :as json])
+            #?(:clj [cloudflare.kotoba.oracle :as oracle]))
   #?(:clj (:import (java.security MessageDigest)
                    (java.util Base64))))
 
-(def max-script-name 64)
-(def max-account-id 64)
-(def max-module-name 128)
-(def max-script-bytes 5242880) ; 5 MiB per module body bound for plan validation
-(def max-modules 16)
-(def max-pages-assets 512)
-(def max-asset-path 512)
-(def max-asset-bytes 2097152) ; 2 MiB per text asset in pure plan bounds
+(def ^:private oid :deploy)
+(def ^:private bulk-oid :pages-bulk)
+
+#?(:clj
+   (defn- o
+     ([export args] (oracle/call oid export args))
+     ([oracle-id export args] (oracle/call oracle-id export args))))
+
+#?(:clj
+   (defn- tag->err
+     "Oracle bare tag → :deploy/<tag> keyword, or nil when ok (empty)."
+     [tag]
+     (when-not (str/blank? (str tag))
+       (keyword "deploy" (str tag)))))
+
+(def max-script-name
+  #?(:clj (long (o 'max-script-name []))
+     :cljs 64))
+(def max-account-id
+  #?(:clj (long (o 'max-account-id []))
+     :cljs 64))
+(def max-module-name
+  #?(:clj (long (o 'max-module-name []))
+     :cljs 128))
+(def max-script-bytes
+  #?(:clj (long (o 'max-script-bytes []))
+     :cljs 5242880)) ; 5 MiB per module body bound for plan validation
+(def max-modules
+  #?(:clj (long (o 'max-modules []))
+     :cljs 16))
+(def max-pages-assets
+  #?(:clj (long (o bulk-oid 'max-pages-assets []))
+     :cljs 512))
+(def max-asset-path
+  #?(:clj (long (o bulk-oid 'max-asset-path []))
+     :cljs 512))
+(def max-asset-bytes
+  #?(:clj (long (o bulk-oid 'max-asset-bytes []))
+     :cljs 2097152)) ; 2 MiB per text asset in pure plan bounds
 
 (declare encode-multipart)
 
 (defn validate-account-id
-  "Pure account-id policy. nil when ok, else error keyword."
+  "Pure account-id policy. nil when ok, else error keyword.
+   JVM: kotoba `validate-account-id`."
   [account-id]
-  (let [s (str account-id)]
-    (cond
-      (str/blank? s) :deploy/empty-account
-      (> (count s) max-account-id) :deploy/account-too-long
-      (not (re-matches #"[A-Za-z0-9_-]+" s)) :deploy/bad-account
-      :else nil)))
+  #?(:clj (tag->err (o 'validate-account-id [(str account-id)]))
+     :cljs
+     (let [s (str account-id)]
+       (cond
+         (str/blank? s) :deploy/empty-account
+         (> (count s) max-account-id) :deploy/account-too-long
+         (not (re-matches #"[A-Za-z0-9_-]+" s)) :deploy/bad-account
+         :else nil))))
 
 (defn validate-script-name
-  "Pure Worker script name policy (CF: letters, numbers, underscore, hyphen)."
+  "Pure Worker script name policy (CF: letters, numbers, underscore, hyphen).
+   JVM: kotoba `validate-script-name`."
   [script-name]
-  (let [s (str script-name)]
-    (cond
-      (str/blank? s) :deploy/empty-script
-      (> (count s) max-script-name) :deploy/script-too-long
-      (not (re-matches #"[A-Za-z0-9][A-Za-z0-9_-]*" s)) :deploy/bad-script
-      :else nil)))
+  #?(:clj (tag->err (o 'validate-script-name [(str script-name)]))
+     :cljs
+     (let [s (str script-name)]
+       (cond
+         (str/blank? s) :deploy/empty-script
+         (> (count s) max-script-name) :deploy/script-too-long
+         (not (re-matches #"[A-Za-z0-9][A-Za-z0-9_-]*" s)) :deploy/bad-script
+         :else nil))))
 
 (defn validate-project-name
   "Pure Pages project name policy (same charset as script names)."
@@ -60,47 +98,81 @@
   (validate-script-name project-name))
 
 (defn workers-script-path
-  "REST path for a Worker script resource."
+  "REST path for a Worker script resource.
+   JVM: path via kotoba after host validation."
   [account-id script-name]
   (when-let [err (or (validate-account-id account-id)
                      (validate-script-name script-name))]
     (throw (ex-info "cloudflare.deploy path validation failed"
                     {:phase :cloudflare-deploy :error err})))
-  (str "/accounts/" account-id "/workers/scripts/" script-name))
+  #?(:clj (o 'workers-script-path [(str account-id) (str script-name)])
+     :cljs (str "/accounts/" account-id "/workers/scripts/" script-name)))
 
 (defn pages-project-path
-  "REST path for a Pages project resource."
+  "REST path for a Pages project resource.
+   JVM: path via kotoba after host validation."
   [account-id project-name]
   (when-let [err (or (validate-account-id account-id)
                      (validate-project-name project-name))]
     (throw (ex-info "cloudflare.deploy path validation failed"
                     {:phase :cloudflare-deploy :error err})))
-  (str "/accounts/" account-id "/pages/projects/" project-name))
+  #?(:clj (o 'pages-project-path [(str account-id) (str project-name)])
+     :cljs (str "/accounts/" account-id "/pages/projects/" project-name)))
 
 (defn pages-deployments-path
-  "REST path for listing/creating Pages deployments (metadata API)."
+  "REST path for listing/creating Pages deployments (metadata API).
+   JVM: kotoba `pages-deployments-path`."
   [account-id project-name]
-  (str (pages-project-path account-id project-name) "/deployments"))
+  #?(:clj (do (pages-project-path account-id project-name)
+              (o 'pages-deployments-path [(str account-id) (str project-name)]))
+     :cljs (str (pages-project-path account-id project-name) "/deployments")))
 
 (defn pages-upload-token-path
-  "REST path for Pages Direct Upload JWT (GET)."
+  "REST path for Pages Direct Upload JWT (GET).
+   JVM: kotoba pages-bulk `pages-upload-token-path`."
   [account-id project-name]
-  (str (pages-project-path account-id project-name) "/upload-token"))
+  #?(:clj (do (pages-project-path account-id project-name)
+              (o bulk-oid 'pages-upload-token-path [(str account-id) (str project-name)]))
+     :cljs (str (pages-project-path account-id project-name) "/upload-token")))
 
 (defn validate-asset-path
-  "Pure relative asset path policy for Pages bulk (no .. / absolute / NUL)."
+  "Pure relative asset path policy for Pages bulk (no .. / absolute / NUL).
+   JVM: kotoba pages-bulk `validate-asset-path`."
   [rel]
-  (let [s (str rel)]
-    (cond
-      (str/blank? s) :deploy/empty-asset-path
-      (> (count s) max-asset-path) :deploy/asset-path-too-long
-      (str/includes? s "\0") :deploy/null-byte
-      (str/includes? s "\\") :deploy/backslash
-      (str/starts-with? s "/") :deploy/absolute-asset
-      (str/starts-with? s "~") :deploy/home-escape
-      (str/includes? s "..") :deploy/asset-escape
-      (not (re-matches #"[A-Za-z0-9][A-Za-z0-9_./@+-]*" s)) :deploy/bad-asset-path
-      :else nil)))
+  #?(:clj (tag->err (o bulk-oid 'validate-asset-path [(str rel)]))
+     :cljs
+     (let [s (str rel)]
+       (cond
+         (str/blank? s) :deploy/empty-asset-path
+         (> (count s) max-asset-path) :deploy/asset-path-too-long
+         (str/includes? s "\0") :deploy/null-byte
+         (str/includes? s "\\") :deploy/backslash
+         (str/starts-with? s "/") :deploy/absolute-asset
+         (str/starts-with? s "~") :deploy/home-escape
+         (str/includes? s "..") :deploy/asset-escape
+         (not (re-matches #"[A-Za-z0-9][A-Za-z0-9_./@+-]*" s)) :deploy/bad-asset-path
+         :else nil))))
+
+(defn content-type-for-path
+  "MIME type for a Pages bulk asset path.
+   JVM: kotoba pages-bulk `content-type-for-path`."
+  [path]
+  #?(:clj (o bulk-oid 'content-type-for-path [(str path)])
+     :cljs
+     (cond
+       (str/ends-with? path ".html") "text/html"
+       (str/ends-with? path ".css") "text/css"
+       (str/ends-with? path ".js") "application/javascript"
+       (str/ends-with? path ".json") "application/json"
+       (str/ends-with? path ".svg") "image/svg+xml"
+       :else "application/octet-stream")))
+
+(defn upload-assets-path
+  "REST path for Pages Direct Upload asset blobs.
+   JVM: kotoba pages-bulk `upload-assets-path`."
+  []
+  #?(:clj (o bulk-oid 'upload-assets-path [])
+     :cljs "/pages/assets/upload"))
 
 (defn sha256-hex
   "SHA-256 hex of UTF-8 string. Pure on JVM; cljs injects via pages-asset-manifest."
@@ -209,7 +281,8 @@
                          :body meta-json}]
                  branch (conj {:name "branch" :body (str branch)}))
          body (encode-multipart boundary parts)
-         ct (str "multipart/form-data; boundary=" boundary)]
+         ct #?(:clj (o 'multipart-content-type [(str boundary)])
+               :cljs (str "multipart/form-data; boundary=" boundary))]
      {:method :post
       :path (pages-deployments-path account-id project-name)
       :content-type ct
@@ -246,19 +319,13 @@
          items (for [h missing
                      :let [p (hash->path h)]]
                  {:path p :hash h :content (get path->content p)
-                  :content-type (cond
-                                  (str/ends-with? p ".html") "text/html"
-                                  (str/ends-with? p ".css") "text/css"
-                                  (str/ends-with? p ".js") "application/javascript"
-                                  (str/ends-with? p ".json") "application/json"
-                                  (str/ends-with? p ".svg") "image/svg+xml"
-                                  :else "application/octet-stream")})
+                  :content-type (content-type-for-path p)})
          token-step {:method :get
                      :path (pages-upload-token-path account-id project-name)
                      :op :pages/upload-token}
          upload-step (when (seq items)
                        {:method :post
-                        :path "/pages/assets/upload"
+                        :path (upload-assets-path)
                         :op :pages/upload-assets
                         :content-type "application/json"
                         :body #?(:clj (json/write-str
@@ -290,27 +357,33 @@
   (when-not (string? script-body)
     (throw (ex-info "cloudflare.deploy put-plan requires string script-body"
                     {:phase :cloudflare-deploy})))
-  (when (> (count script-body) max-script-bytes)
+  (when #?(:clj (zero? (long (o 'script-body-ok-size? [(long (count script-body))])))
+           :cljs (> (count script-body) max-script-bytes))
     (throw (ex-info "cloudflare.deploy script body too large"
                     {:phase :cloudflare-deploy :error :deploy/script-too-large})))
-  {:method :put
-   :path (workers-script-path account-id script-name)
-   :content-type "application/javascript"
-   :headers {"Content-Type" "application/javascript"}
-   :body script-body})
+  (let [ct #?(:clj (o 'put-content-type [])
+              :cljs "application/javascript")]
+    {:method :put
+     :path (workers-script-path account-id script-name)
+     :content-type ct
+     :headers {"Content-Type" ct}
+     :body script-body}))
 
 (defn validate-module-name
-  "Pure module file name policy (e.g. main.js, src/index.mjs)."
+  "Pure module file name policy (e.g. main.js, src/index.mjs).
+   JVM: kotoba `validate-module-name`."
   [module-name]
-  (let [s (str module-name)]
-    (cond
-      (str/blank? s) :deploy/empty-module
-      (> (count s) max-module-name) :deploy/module-too-long
-      (str/includes? s "\0") :deploy/null-byte
-      (str/includes? s "..") :deploy/module-escape
-      (str/starts-with? s "/") :deploy/module-absolute
-      (not (re-matches #"[A-Za-z0-9][A-Za-z0-9_./-]*" s)) :deploy/bad-module
-      :else nil)))
+  #?(:clj (tag->err (o 'validate-module-name [(str module-name)]))
+     :cljs
+     (let [s (str module-name)]
+       (cond
+         (str/blank? s) :deploy/empty-module
+         (> (count s) max-module-name) :deploy/module-too-long
+         (str/includes? s "\0") :deploy/null-byte
+         (str/includes? s "..") :deploy/module-escape
+         (str/starts-with? s "/") :deploy/module-absolute
+         (not (re-matches #"[A-Za-z0-9][A-Za-z0-9_./-]*" s)) :deploy/bad-module
+         :else nil))))
 
 (defn module-metadata
   "Pure Workers multipart `metadata` JSON map (ES modules).
@@ -328,28 +401,51 @@
     (seq bindings) (assoc :bindings (vec bindings))))
 
 (defn- multipart-part
-  "Encode one multipart form part (CRLF). Pure string."
+  "Encode one multipart form part (CRLF). Pure string.
+   JVM: kotoba `multipart-part`."
   [boundary {:keys [name filename content-type body]}]
-  (str "--" boundary "\r\n"
-       "Content-Disposition: form-data; name=\"" name "\""
-       (when filename (str "; filename=\"" filename "\""))
-       "\r\n"
-       (when content-type (str "Content-Type: " content-type "\r\n"))
-       "\r\n"
-       body "\r\n"))
+  #?(:clj (o 'multipart-part
+             [(str boundary)
+              (str name)
+              (str (or filename ""))
+              (str (or content-type ""))
+              (str body)])
+     :cljs
+     (str "--" boundary "
+"
+          "Content-Disposition: form-data; name="" name """
+          (when filename (str "; filename="" filename """))
+          "
+"
+          (when content-type (str "Content-Type: " content-type "
+"))
+          "
+"
+          body "
+")))
 
 (defn encode-multipart
   "Pure multipart/form-data body for the given parts + boundary.
 
-  parts: seq of {:name :filename? :content-type? :body}"
+  parts: seq of {:name :filename? :content-type? :body}
+   JVM: boundary gate + join via kotoba multipart helpers."
   [boundary parts]
-  (when (or (str/blank? (str boundary))
-            (str/includes? (str boundary) " ")
-            (str/includes? (str boundary) "\""))
-    (throw (ex-info "cloudflare.deploy multipart boundary invalid"
-                    {:phase :cloudflare-deploy})))
-  (str (apply str (map #(multipart-part boundary %) parts))
-       "--" boundary "--\r\n"))
+  #?(:clj
+     (do
+       (when-not (= 1 (long (o 'boundary-ok? [(str boundary)])))
+         (throw (ex-info "cloudflare.deploy multipart boundary invalid"
+                         {:phase :cloudflare-deploy})))
+       (let [joined (apply str (map #(multipart-part boundary %) parts))]
+         (o 'encode-parts-close [(str joined) (str boundary)])))
+     :cljs
+     (do
+       (when (or (str/blank? (str boundary))
+                 (str/includes? (str boundary) " ")
+                 (str/includes? (str boundary) "\""))
+         (throw (ex-info "cloudflare.deploy multipart boundary invalid"
+                         {:phase :cloudflare-deploy})))
+       (str (apply str (map #(multipart-part boundary %) parts))
+            "--" boundary "--\r\n"))))
 
 (defn workers-module-put-plan
   "Pure plan for ES-module Worker upload (multipart metadata + modules).
@@ -377,7 +473,8 @@
                   (every? string? (vals modules)))
      (throw (ex-info "cloudflare.deploy modules must be non-empty string map"
                      {:phase :cloudflare-deploy})))
-   (when (> (count modules) max-modules)
+   (when #?(:clj (zero? (long (o 'modules-count-ok? [(long (count modules))])))
+            :cljs (> (count modules) max-modules))
      (throw (ex-info "cloudflare.deploy too many modules"
                      {:phase :cloudflare-deploy :error :deploy/too-many-modules})))
    (doseq [[n body] modules]
@@ -410,7 +507,8 @@
                              :body body})
                           modules))
          body (encode-multipart boundary parts)
-         ct (str "multipart/form-data; boundary=" boundary)]
+         ct #?(:clj (o 'multipart-content-type [(str boundary)])
+               :cljs (str "multipart/form-data; boundary=" boundary))]
      {:method :put
       :path (workers-script-path account-id script-name)
       :content-type ct
@@ -440,8 +538,9 @@
    (when-let [err (validate-project-name project)]
      (throw (ex-info "cloudflare.deploy wrangler plan validation failed"
                      {:phase :cloudflare-deploy :error err})))
-   (when (or (str/blank? (str directory))
-             (str/includes? (str directory) "\0"))
+   (when #?(:clj (zero? (long (o 'directory-ok? [(str directory)])))
+            :cljs (or (str/blank? (str directory))
+                      (str/includes? (str directory) "\0")))
      (throw (ex-info "cloudflare.deploy wrangler plan bad directory"
                      {:phase :cloudflare-deploy})))
    (let [bin (or (not-empty (str wrangler-bin)) "wrangler")]

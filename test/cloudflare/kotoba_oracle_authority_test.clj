@@ -6,12 +6,16 @@
 (ns cloudflare.kotoba-oracle-authority-test
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.test :refer [deftest is testing]]
             [cloudflare.client :as client]
             [cloudflare.workers :as workers]
             [cloudflare.zones :as zones]
             [cloudflare.pages :as pages]
             [cloudflare.logpush :as logpush]
+            [cloudflare.stream :as stream]
+            [cloudflare.deploy :as deploy]
+            [cloudflare.analytics :as analytics]
             [cloudflare.kotoba.oracle :as oracle]
             [cloudflare.kotoba-oracle-gen :as gen]
             [kotoba.compiler.core :as compiler]
@@ -23,9 +27,11 @@
   (doseq [id (oracle/catalog-ids)]
     (is (oracle/ready? id) (str "not ready: " id)))
   (is (some #{:client} (oracle/catalog-ids)))
-  (is (some #{:workers-path} (oracle/catalog-ids)))
-  (is (some #{:zones-path} (oracle/catalog-ids)))
-  (is (some #{:logpush-path} (oracle/catalog-ids))))
+  (is (some #{:stream} (oracle/catalog-ids)))
+  (is (some #{:deploy} (oracle/catalog-ids)))
+  (is (some #{:pages-bulk} (oracle/catalog-ids)))
+  (is (some #{:analytics} (oracle/catalog-ids)))
+  (is (some #{:analytics-parse} (oracle/catalog-ids))))
 
 (deftest product-shell-client-uses-oracle-results
   (testing "constants from client_core"
@@ -70,35 +76,81 @@
   (is (= "/zones/z1/logpush/jobs" (logpush/jobs-path "z1")))
   (is (= "/zones/z1/logpush/jobs/j9" (logpush/job-path "z1" "j9"))))
 
+(deftest product-shell-stream-uses-oracle
+  (is (= "<blank>" (stream/redact-key "")))
+  (is (= "abcd…<9 chars>" (stream/redact-key "abcd-efgh")))
+  (is (= "rtmps://a.rtmps.youtube.com/live2" (stream/destination-url :youtube :rtmps)))
+  (is (nil? (stream/destination-url :unknown :rtmps)))
+  (is (= [] (stream/validate-output {:url "rtmps://x/y" :stream-key "k"})))
+  (is (= [:missing-url :missing-stream-key]
+         (stream/validate-output {})))
+  (is (= "/accounts/a1/stream/live_inputs" (stream/inputs-path "a1")))
+  (is (= "/accounts/a1/stream/live_inputs/u1" (stream/live-input-path "a1" "u1")))
+  (is (= "/accounts/a1/stream/live_inputs/u1/outputs" (stream/outputs-path "a1" "u1")))
+  (is (str/includes? (stream/live-input-summary {:uid "u" :whip-url "w" :rtmps-url "r"
+                                                 :rtmps-stream-key "abcdxxxx"})
+                     "key=abcd")))
+
+(deftest product-shell-deploy-uses-oracle
+  (is (= 64 deploy/max-account-id))
+  (is (= 64 deploy/max-script-name))
+  (is (= 512 deploy/max-pages-assets))
+  (is (nil? (deploy/validate-account-id "abc123")))
+  (is (= :deploy/empty-account (deploy/validate-account-id "")))
+  (is (= :deploy/bad-script (deploy/validate-script-name "-bad")))
+  (is (= "/accounts/a/workers/scripts/s" (deploy/workers-script-path "a" "s")))
+  (is (= "/accounts/a/pages/projects/p/upload-token"
+         (deploy/pages-upload-token-path "a" "p")))
+  (is (nil? (deploy/validate-asset-path "index.html")))
+  (is (= :deploy/absolute-asset (deploy/validate-asset-path "/abs")))
+  (is (= "text/html" (deploy/content-type-for-path "index.html")))
+  (is (= "/pages/assets/upload" (deploy/upload-assets-path)))
+  (let [body (deploy/encode-multipart "bnd" [{:name "n" :body "x"}])]
+    (is (str/includes? body "Content-Disposition"))
+    (is (str/includes? body "--bnd--"))))
+
+(deftest product-shell-analytics-uses-oracle
+  (is (str/includes? analytics/daily-query "DailyTraffic"))
+  (is (str/includes? (analytics/path-query true) "$host: String!"))
+  (is (not (str/includes? (analytics/path-query false) "$host: String!")))
+  (is (= {:ok? false :errors [{:m 1}]}
+         (analytics/parse-path-report {:errors [{:m 1}]}))))
+
 (deftest client-oracle-call-matches-live-compile
   (let [live (:kir (compiler/compile-source (slurp "kotoba/client_core.kotoba")
                                             :wasm32-kotoba-v1 {}))]
     (is (= (ir/execute live 'api-base [])
            (oracle/call :client 'api-base [])))
-    (is (= (ir/execute live 'graphql-endpoint [])
-           (oracle/call :client 'graphql-endpoint [])))
     (is (= (ir/execute live 'rest-url ["/zones" "per_page=50"])
            (oracle/call :client 'rest-url ["/zones" "per_page=50"])))
     (is (= (ir/execute live 'bearer-auth ["t"])
-           (oracle/call :client 'bearer-auth ["t"])))
-    (is (= (ir/execute live 'transport-ok? [200])
-           (oracle/call :client 'transport-ok? [200])))))
+           (oracle/call :client 'bearer-auth ["t"])))))
 
-(deftest workers-path-oracle-call-matches-live-compile
-  (let [live (:kir (compiler/compile-source (slurp "kotoba/workers_path_core.kotoba")
-                                            :wasm32-kotoba-v1 {}))]
-    (is (= (ir/execute live 'zone-routes-path ["z"])
-           (oracle/call :workers-path 'zone-routes-path ["z"])))
-    (is (= (ir/execute live 'dns-records-path ["z"])
-           (oracle/call :workers-path 'dns-records-path ["z"])))
-    (is (= (ir/execute live 'pages-projects-path ["a"])
-           (oracle/call :workers-path 'pages-projects-path ["a"])))))
-
-(deftest logpush-path-oracle-call-matches-live-compile
-  (let [live (:kir (compiler/compile-source (slurp "kotoba/logpush_path_core.kotoba")
-                                            :wasm32-kotoba-v1 {}))]
-    (is (= (ir/execute live 'job-path ["z" "j"])
-           (oracle/call :logpush-path 'job-path ["z" "j"])))))
+(deftest residual-oracles-match-live-compile
+  (let [s (:kir (compiler/compile-source (slurp "kotoba/stream_core.kotoba")
+                                         :wasm32-kotoba-v1 {}))
+        d (:kir (compiler/compile-source (slurp "kotoba/deploy_core.kotoba")
+                                         :wasm32-kotoba-v1 {}))
+        a (:kir (compiler/compile-source (slurp "kotoba/analytics_core.kotoba")
+                                         :wasm32-kotoba-v1 {}))
+        pb (:kir (compiler/compile-source (slurp "kotoba/pages_bulk_core.kotoba")
+                                          :wasm32-kotoba-v1 {}))
+        ap (:kir (compiler/compile-source (slurp "kotoba/analytics_parse_core.kotoba")
+                                          :wasm32-kotoba-v1 {}))]
+    (is (= (ir/execute s 'redact-key ["abcd-efgh"])
+           (oracle/call :stream 'redact-key ["abcd-efgh"])))
+    (is (= (ir/execute s 'validate-flags ["rtmps://x" "k"])
+           (oracle/call :stream 'validate-flags ["rtmps://x" "k"])))
+    (is (= (ir/execute d 'validate-account-id [""])
+           (oracle/call :deploy 'validate-account-id [""])))
+    (is (= (ir/execute d 'workers-script-path ["a" "s"])
+           (oracle/call :deploy 'workers-script-path ["a" "s"])))
+    (is (= (ir/execute a 'path-query [1])
+           (oracle/call :analytics 'path-query [1])))
+    (is (= (ir/execute pb 'content-type-for-path ["x.html"])
+           (oracle/call :pages-bulk 'content-type-for-path ["x.html"])))
+    (is (= (ir/execute ap 'report-ok? [0])
+           (oracle/call :analytics-parse 'report-ok? [0])))))
 
 (deftest precompiled-client-kir-does-not-drift
   (let [live (:kir (compiler/compile-source (slurp "kotoba/client_core.kotoba")
@@ -106,7 +158,7 @@
         shipped (edn/read-string
                  (slurp (io/resource "cloudflare/oracle/client_core.kir.edn")))]
     (is (= live shipped)
-        "client_core KIR drift — run: clojure -M:test -m cloudflare.kotoba-oracle-gen")))
+        "client_core KIR drift — run: clojure -M:oracle-gen")))
 
 (deftest gen-compile-kir-roundtrip
   (let [kir (gen/compile-kir "kotoba/client_core.kotoba")]

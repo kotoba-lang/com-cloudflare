@@ -23,7 +23,14 @@
   script that actually touches the key run wherever the key already lives,
   instead of forcing a JVM into that path."
   (:require [clojure.string :as str]
-            [cloudflare.client :as client]))
+            [cloudflare.client :as client]
+            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+
+(def ^:private oid :stream)
+
+#?(:clj
+   (defn- o [export args]
+     (oracle/call oid export args)))
 
 ;; ---------------------------------------------------------------------------
 ;; Known RTMP destinations
@@ -47,21 +54,29 @@
 (defn destination-url
   "Ingest URL for `platform` (:youtube / :twitch). `variant` defaults to
   :rtmps. Returns nil for an unknown platform or variant -- callers pass
-  their own URL in that case."
+  their own URL in that case.
+   JVM: kotoba `destination-url` (empty ≡ unknown)."
   ([platform] (destination-url platform :rtmps))
-  ([platform variant] (get-in destinations [(keyword platform) (keyword variant)])))
+  ([platform variant]
+   #?(:clj (let [u (o 'destination-url
+                      [(name (keyword platform)) (name (keyword variant))])]
+             (when-not (str/blank? u) u))
+      :cljs (get-in destinations [(keyword platform) (keyword variant)]))))
 
 (defn redact-key
   "A stream key rendered safe to print: first 4 characters, then the length.
   Provisioning is the one moment a human needs to confirm *which* key was
   used, and echoing it whole is how a broadcast credential ends up in a
-  terminal scrollback, a CI log, or a screenshot."
+  terminal scrollback, a CI log, or a screenshot.
+   JVM: kotoba `redact-key`."
   [stream-key]
-  (let [k (str stream-key)]
-    (cond
-      (str/blank? k) "<blank>"
-      (<= (count k) 4) (str "<" (count k) " chars>")
-      :else (str (subs k 0 4) "…<" (count k) " chars>"))))
+  #?(:clj (o 'redact-key [(str (or stream-key ""))])
+     :cljs
+     (let [k (str stream-key)]
+       (cond
+         (str/blank? k) "<blank>"
+         (<= (count k) 4) (str "<" (count k) " chars>")
+         :else (str (subs k 0 4) "…<" (count k) " chars>")))))
 
 ;; ---------------------------------------------------------------------------
 ;; Validation
@@ -84,19 +99,33 @@
                           newline and all.
     :key-embedded-in-url  the URL already ends with the stream key. Pasting
                           `<ingest-url>/<key>` into the URL field and the
-                          key into the key field sends it twice."
+                          key into the key field sends it twice.
+
+   JVM: kotoba `validate-flags` bitset decoded to keywords."
   [{:keys [url stream-key]}]
-  (let [url (str url)
-        k (str stream-key)]
-    (cond-> []
-      (str/blank? url) (conj :missing-url)
-      (and (not (str/blank? url))
-           (not (re-find #"^rtmps?://" url))) (conj :bad-scheme)
-      (str/blank? k) (conj :missing-stream-key)
-      (and (not (str/blank? k))
-           (re-find #"\s" k)) (conj :whitespace-in-key)
-      (and (not (str/blank? k))
-           (str/includes? url k)) (conj :key-embedded-in-url))))
+  #?(:clj
+     (let [flags (long (o 'validate-flags
+                          [(str (or url "")) (str (or stream-key ""))]))]
+       (into []
+             (keep (fn [[bit kw]]
+                     (when (pos? (bit-and flags bit)) kw)))
+             [[1 :missing-url]
+              [2 :bad-scheme]
+              [4 :missing-stream-key]
+              [8 :whitespace-in-key]
+              [16 :key-embedded-in-url]]))
+     :cljs
+     (let [url (str url)
+           k (str stream-key)]
+       (cond-> []
+         (str/blank? url) (conj :missing-url)
+         (and (not (str/blank? url))
+              (not (re-find #"^rtmps?://" url))) (conj :bad-scheme)
+         (str/blank? k) (conj :missing-stream-key)
+         (and (not (str/blank? k))
+              (re-find #"\s" k)) (conj :whitespace-in-key)
+         (and (not (str/blank? k))
+              (str/includes? url k)) (conj :key-embedded-in-url)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Pure request builders
@@ -106,8 +135,23 @@
   (cond-> {:method method :path path :url (str client/api-base path)}
     (some? body) (assoc :body body)))
 
-(defn- inputs-path [account-id]
-  (str "/accounts/" account-id "/stream/live_inputs"))
+(defn inputs-path
+  "REST path for live inputs collection. JVM: kotoba `inputs-path`."
+  [account-id]
+  #?(:clj (o 'inputs-path [(str account-id)])
+     :cljs (str "/accounts/" account-id "/stream/live_inputs")))
+
+(defn live-input-path
+  "REST path for one live input. JVM: kotoba `live-input-path`."
+  [account-id input-uid]
+  #?(:clj (o 'live-input-path [(str account-id) (str input-uid)])
+     :cljs (str (inputs-path account-id) "/" input-uid)))
+
+(defn outputs-path
+  "REST path for live outputs under an input. JVM: kotoba `outputs-path`."
+  [account-id input-uid]
+  #?(:clj (o 'outputs-path [(str account-id) (str input-uid)])
+     :cljs (str (live-input-path account-id input-uid) "/outputs")))
 
 (defn create-live-input-request
   "POST a new live input.
@@ -139,13 +183,13 @@
   (path->request :get (inputs-path account-id) nil))
 
 (defn live-input-request [account-id input-uid]
-  (path->request :get (str (inputs-path account-id) "/" input-uid) nil))
+  (path->request :get (live-input-path account-id input-uid) nil))
 
 (defn delete-live-input-request
   "DELETE a live input. This also removes its outputs -- Cloudflare keeps
   no orphan output once the input is gone."
   [account-id input-uid]
-  (path->request :delete (str (inputs-path account-id) "/" input-uid) nil))
+  (path->request :delete (live-input-path account-id input-uid) nil))
 
 (defn create-live-output-request
   "POST an RTMP live output onto `input-uid`: Cloudflare re-broadcasts the
@@ -164,14 +208,14 @@
                       {:problems problems
                        :url url
                        :stream-key (redact-key stream-key)})))
-    (path->request :post (str (inputs-path account-id) "/" input-uid "/outputs")
+    (path->request :post (outputs-path account-id input-uid)
                    {:url url :streamKey stream-key :enabled enabled})))
 
 (defn list-live-outputs-request [account-id input-uid]
-  (path->request :get (str (inputs-path account-id) "/" input-uid "/outputs") nil))
+  (path->request :get (outputs-path account-id input-uid) nil))
 
 (defn delete-live-output-request [account-id input-uid output-uid]
-  (path->request :delete (str (inputs-path account-id) "/" input-uid "/outputs/" output-uid) nil))
+  (path->request :delete (str (outputs-path account-id input-uid) "/" output-uid) nil))
 
 ;; ---------------------------------------------------------------------------
 ;; Pure response readers
@@ -210,13 +254,21 @@
   "A one-line, credential-free description of a live input, safe to log or
   print during provisioning. The RTMPS stream key Cloudflare hands back is
   itself a publish credential for this input -- it is redacted here for the
-  same reason the destination key is."
+  same reason the destination key is.
+   JVM: kotoba `live-input-summary`."
   [{:keys [uid name whip-url rtmps-url rtmps-stream-key]}]
-  (str "live-input " uid
-       (when name (str " (" name ")"))
-       " whip=" (or whip-url "-")
-       " rtmps=" (or rtmps-url "-")
-       " key=" (redact-key rtmps-stream-key)))
+  #?(:clj (o 'live-input-summary
+             [(str (or uid ""))
+              (str (or name ""))
+              (str (or whip-url "-"))
+              (str (or rtmps-url "-"))
+              (str (or rtmps-stream-key ""))])
+     :cljs
+     (str "live-input " uid
+          (when name (str " (" name ")"))
+          " whip=" (or whip-url "-")
+          " rtmps=" (or rtmps-url "-")
+          " key=" (redact-key rtmps-stream-key))))
 
 ;; ---------------------------------------------------------------------------
 ;; :clj convenience layer

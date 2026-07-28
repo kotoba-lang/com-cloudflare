@@ -19,23 +19,36 @@
     app.itonami.cloud discovery), so omit `host` to see the whole zone
     first before assuming a host-filtered zero means something is broken."
   (:require [clojure.string :as str]
-            [cloudflare.client :as client]))
+            [cloudflare.client :as client]
+            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+
+(def ^:private oid :analytics)
+(def ^:private parse-oid :analytics-parse)
+
+#?(:clj
+   (defn- o
+     ([export args] (oracle/call oid export args))
+     ([oracle-id export args] (oracle/call oracle-id export args))))
 
 (def daily-query
-  "query DailyTraffic($zoneTag: String!, $since: String!, $until: String!) { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequests1dGroups(limit: 31, filter: {date_geq: $since, date_leq: $until}) { sum { requests pageViews bytes } uniq { uniques } dimensions { date } } } } }")
+  #?(:clj (o 'daily-query [])
+     :cljs "query DailyTraffic($zoneTag: String!, $since: String!, $until: String!) { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequests1dGroups(limit: 31, filter: {date_geq: $since, date_leq: $until}) { sum { requests pageViews bytes } uniq { uniques } dimensions { date } } } } }"))
 
 (defn path-query
   "GraphQL query text for the per-path/device/country/status breakdown.
   `host?` controls whether the query declares/filters on $host at all --
   the caller (path-report-request) only passes a $host variable when a
   host filter was actually requested, so the query text and the variables
-  must agree on whether $host exists."
+  must agree on whether $host exists.
+   JVM: kotoba `path-query`."
   [host?]
-  (str "query PathTraffic($zoneTag: String!, $since: Time!, $until: Time!"
-       (when host? ", $host: String!")
-       ") { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequestsAdaptiveGroups(limit: 100, filter: {datetime_geq: $since, datetime_leq: $until"
-       (when host? ", clientRequestHTTPHost: $host")
-       "}) { count dimensions { clientRequestPath clientDeviceType clientCountryName edgeResponseStatus } } } } }"))
+  #?(:clj (o 'path-query [(if host? 1 0)])
+     :cljs
+     (str "query PathTraffic($zoneTag: String!, $since: Time!, $until: Time!"
+          (when host? ", $host: String!")
+          ") { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequestsAdaptiveGroups(limit: 100, filter: {datetime_geq: $since, datetime_leq: $until"
+          (when host? ", clientRequestHTTPHost: $host")
+          "}) { count dimensions { clientRequestPath clientDeviceType clientCountryName edgeResponseStatus } } } } }")))
 
 (defn daily-report-request
   [{:keys [zone-tag since until]}]
@@ -54,24 +67,32 @@
   "{:ok? true :days [{:date :requests :page-views :uniques :bytes} ...]
   :totals {...}} sorted by date ascending, or {:ok? false :errors [...]}
   on a GraphQL-level error (never throws -- a quota/syntax error is data,
-  not an exception, so callers can decide what to do with it)."
+  not an exception, so callers can decide what to do with it).
+   JVM: error gate via kotoba `report-ok?`; totals via host reduce (sum* available)."
   [response]
-  (if-let [errors (seq (:errors response))]
-    {:ok? false :errors errors}
-    (let [rows (groups response "httpRequests1dGroups")
-          days (->> rows
-                    (map (fn [r] {:date (get-in r [:dimensions :date])
-                                 :requests (get-in r [:sum :requests])
-                                 :page-views (get-in r [:sum :pageViews])
-                                 :uniques (get-in r [:uniq :uniques])
-                                 :bytes (get-in r [:sum :bytes])}))
-                    (sort-by :date))]
-      {:ok? true
-       :days days
-       :totals {:requests (reduce + (map :requests days))
-                :page-views (reduce + (map :page-views days))
-                :uniques (reduce + (map :uniques days))
-                :bytes (reduce + (map :bytes days))}})))
+  (let [has-errors (if (seq (:errors response)) 1 0)
+        ok? #?(:clj (= 1 (o parse-oid 'report-ok? [(long has-errors)]))
+               :cljs (zero? has-errors))]
+    (if-not ok?
+      {:ok? false :errors (:errors response)}
+      (let [rows (groups response "httpRequests1dGroups")
+            days (->> rows
+                      (map (fn [r] {:date (get-in r [:dimensions :date])
+                                   :requests (get-in r [:sum :requests])
+                                   :page-views (get-in r [:sum :pageViews])
+                                   :uniques (get-in r [:uniq :uniques])
+                                   :bytes (get-in r [:sum :bytes])}))
+                      (sort-by :date))
+            reqs (mapv :requests days)
+            pvs (mapv :page-views days)
+            uniqs (mapv :uniques days)
+            bytes (mapv :bytes days)]
+        {:ok? true
+         :days days
+         :totals {:requests (reduce + 0 reqs)
+                  :page-views (reduce + 0 pvs)
+                  :uniques (reduce + 0 uniqs)
+                  :bytes (reduce + 0 bytes)}}))))
 
 (defn path-report-rows
   "The raw per-group rows behind a path-report! response, before any
@@ -95,18 +116,22 @@
   {value -> count} map, tallied by summing :count across all matching
   rows) or {:ok? false :errors [...]}. A lossy summary of path-report-rows
   -- a consumer that wants the underlying per-group facts (e.g. to persist
-  them, not just display a tally) should use path-report-rows instead."
+  them, not just display a tally) should use path-report-rows instead.
+   JVM: error gate via kotoba `report-ok?`; tally folds stay host maps."
   [response]
-  (if-let [errors (seq (:errors response))]
-    {:ok? false :errors errors}
-    (let [rows (path-report-rows response)
-          tally (fn [k] (reduce (fn [acc r] (update acc (get r k) (fnil + 0) (:count r))) {} rows))]
-      {:ok? true
-       :total (reduce + (map :count rows))
-       :by-path (tally :path)
-       :by-device (tally :device)
-       :by-country (tally :country)
-       :by-status (tally :status)})))
+  (let [has-errors (if (seq (:errors response)) 1 0)
+        ok? #?(:clj (= 1 (o parse-oid 'report-ok? [(long has-errors)]))
+               :cljs (zero? has-errors))]
+    (if-not ok?
+      {:ok? false :errors (:errors response)}
+      (let [rows (path-report-rows response)
+            tally (fn [k] (reduce (fn [acc r] (update acc (get r k) (fnil + 0) (:count r))) {} rows))]
+        {:ok? true
+         :total (reduce + 0 (map :count rows))
+         :by-path (tally :path)
+         :by-device (tally :device)
+         :by-country (tally :country)
+         :by-status (tally :status)}))))
 
 #?(:clj
 (defn daily-report!
