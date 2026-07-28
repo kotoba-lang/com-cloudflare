@@ -1,4 +1,4 @@
-# ADR 0011: W6 product-shell oracle authority (cloudflare dual-source)
+# ADR 0012: W6 product-shell oracle authority (cloudflare dual-source)
 
 - Status: Accepted
 - Date: 2026-07-28
