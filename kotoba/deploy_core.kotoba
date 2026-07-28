@@ -1,0 +1,126 @@
+(ns deploy-core
+  (:export [max-account-id max-script-name max-script-bytes
+            blank? ws? alnum-char? account-char? account-body-ok?
+            script-body-ok? validate-account-id validate-script-name
+            validate-project-name put-content-type
+            workers-script-path pages-project-path pages-deployments-path
+            put-method delete-method script-body-ok-size?
+            wrangler-pages-deploy-cmd directory-ok?]))
+
+;; W6 cloud-deploy oracle — pure validators + path builders from cloudflare.deploy.
+;; Plan maps {:method :path :headers :body} and *! HTTP stay cljc.
+;; validate-*: empty string ≡ cljc nil (ok); else bare error tag (no :deploy/ ns).
+;; Charset mirrors re-matches #"[A-Za-z0-9_-]+" / #"[A-Za-z0-9][A-Za-z0-9_-]*".
+;; Parity: test/cloudflare/deploy_kotoba_parity_test.clj
+
+(defn max-account-id [] :i64 64)
+(defn max-script-name [] :i64 64)
+(defn max-script-bytes [] :i64 5242880)
+
+(defn ws? [c :string] :i64
+  (if (string=? c " ")
+    1
+    (if (string=? c "\n")
+      1
+      (if (string=? c "\t")
+        1
+        (if (string=? c "\r") 1 0)))))
+
+(defn blank? [s :string] :i64
+  ;; cljc clojure.string/blank?
+  (let [n (string-byte-length s)]
+    (if (= n 0)
+      1
+      (if (= (ws? (string-substring s 0 1)) 1)
+        (blank? (string-substring s 1 n))
+        0))))
+
+(defn alnum-char? [c :string] :i64
+  (if (string-contains? "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" c)
+    1 0))
+
+(defn account-char? [c :string] :i64
+  ;; [A-Za-z0-9_-]
+  (if (string-contains? "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-" c)
+    1 0))
+
+(defn account-body-ok? [s :string] :i64
+  (let [n (string-byte-length s)]
+    (if (= n 0)
+      1
+      (if (= (account-char? (string-substring s 0 1)) 1)
+        (account-body-ok? (string-substring s 1 n))
+        0))))
+
+(defn script-body-ok? [s :string] :i64
+  ;; remaining chars after first: [A-Za-z0-9_-]*
+  (account-body-ok? s))
+
+(defn validate-account-id [account-id :string] :string
+  (if (= (blank? account-id) 1)
+    "empty-account"
+    (if (< (max-account-id) (string-byte-length account-id))
+      "account-too-long"
+      (if (= (account-body-ok? account-id) 1)
+        ""
+        "bad-account"))))
+
+(defn validate-script-name [script-name :string] :string
+  (if (= (blank? script-name) 1)
+    "empty-script"
+    (if (< (max-script-name) (string-byte-length script-name))
+      "script-too-long"
+      (let [n (string-byte-length script-name)
+            first (string-substring script-name 0 1)
+            rest (string-substring script-name 1 n)]
+        (if (= (alnum-char? first) 1)
+          (if (= (script-body-ok? rest) 1)
+            ""
+            "bad-script")
+          "bad-script")))))
+
+(defn validate-project-name [project-name :string] :string
+  ;; cljc: same policy as script names
+  (validate-script-name project-name))
+
+(defn put-content-type [] :string
+  "application/javascript")
+
+(defn put-method [] :string "put")
+(defn delete-method [] :string "delete")
+
+(defn workers-script-path [account-id :string script-name :string] :string
+  ;; unvalidated assembly (cljc throws before concat on bad names)
+  (string-concat
+   "/accounts/"
+   (string-concat account-id
+                  (string-concat "/workers/scripts/" script-name))))
+
+(defn pages-project-path [account-id :string project-name :string] :string
+  (string-concat
+   "/accounts/"
+   (string-concat account-id
+                  (string-concat "/pages/projects/" project-name))))
+
+(defn pages-deployments-path [account-id :string project-name :string] :string
+  (string-concat (pages-project-path account-id project-name) "/deployments"))
+
+(defn script-body-ok-size? [byte-len :i64] :i64
+  (if (< (max-script-bytes) byte-len) 0 1))
+
+(defn directory-ok? [directory :string] :i64
+  ;; cljc: not blank and no NUL
+  (if (= (blank? directory) 1)
+    0
+    (if (string-contains? directory "\0") 0 1)))
+
+(defn wrangler-pages-deploy-cmd [project :string directory :string wrangler-bin :string] :string
+  ;; space-joined argv (cljc returns vector). empty bin ⇒ "wrangler".
+  (let [bin (if (string=? wrangler-bin "") "wrangler" wrangler-bin)]
+    (string-concat
+     bin
+     (string-concat
+      " pages deploy "
+      (string-concat
+       directory
+       (string-concat " --project-name " project))))))
