@@ -56,3 +56,27 @@
        #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
        #"CLOUDFLARE_API_TOKEN is required"
        (client/graphql! {:query "query{}"} {:http-fn (stub-http-fn 200 "{}")}))))
+
+#?(:clj
+(deftest api-token-accepts-kit-shaped-fetch
+  (testing "explicit :token still wins"
+    (is (= "explicit" (client/api-token {:token "explicit"
+                                         :fetch (fn [_] {:tag :value :value "from-fetch"})}))))
+  (testing "kit-shaped :fetch supplies the token by secret name only"
+    (let [seen (atom nil)
+          fetch (fn [{:keys [name]}]
+                  (reset! seen name)
+                  {:tag :value :value "kit-tok"})]
+      (is (= "kit-tok" (client/api-token {:fetch fetch})))
+      (is (= client/api-token-secret-name @seen))))
+  (testing "fetch error / empty fails closed"
+    (is (thrown-with-msg?
+         clojure.lang.ExceptionInfo
+         #"CLOUDFLARE_API_TOKEN is required"
+         (client/api-token {:fetch (fn [_] {:tag :error :code :secret/not-found :message "x"})}))))
+  (testing "graphql! wires :fetch through resolve-token"
+    (let [captured (atom nil)
+          http-fn (fn [req] (reset! captured req) {:status 200 :body "{\"data\":{},\"errors\":null}"})
+          fetch (fn [_] {:tag :value :value "fetch-tok"})]
+      (client/graphql! {:query "query{}"} {:http-fn http-fn :fetch fetch})
+      (is (= "Bearer fetch-tok" (get (:headers @captured) "Authorization")))))))
