@@ -1,0 +1,49 @@
+(ns zones-path-core
+  (:export [list-zones-path list-zones-per-page list-zones-query list-zones-request-path
+            dns-records-path dns-name-query-pair dns-records-path-with-name
+            query-pair with-query hostname-matches?]))
+
+;; W6 cloudflare-pure-request-v1 — zones query strings + hostname match
+;; for zone-by-name / custom-domains / pages domain discovery.
+;; Base workers/zones/pages path strings: kotoba/workers_path_core.kotoba.
+;; HTTP rest! / getenv stay host.
+;; Parity: test/cloudflare/zones_path_kotoba_parity_test.clj
+
+(defn list-zones-path [] :string
+  "/zones")
+
+(defn list-zones-per-page [] :string
+  ;; cljc list-zones: hard-coded per_page=50
+  "50")
+
+(defn query-pair [k :string v :string] :string
+  ;; client/rest! builds (str (name k) "=" v)
+  (string-concat k (string-concat "=" v)))
+
+(defn with-query [path :string qs :string] :string
+  (if (string=? qs "")
+    path
+    (string-concat path (string-concat "?" qs))))
+
+(defn list-zones-query [] :string
+  (query-pair "per_page" (list-zones-per-page)))
+
+(defn list-zones-request-path [] :string
+  ;; exact path string zones/list-zones passes to client/rest!
+  (with-query (list-zones-path) (list-zones-query)))
+
+(defn dns-records-path [zone-id :string] :string
+  (string-concat "/zones/" (string-concat zone-id "/dns_records")))
+
+(defn dns-name-query-pair [name :string] :string
+  ;; zones/dns-records :query {:name name}
+  (query-pair "name" name))
+
+(defn dns-records-path-with-name [zone-id :string name :string] :string
+  (with-query (dns-records-path zone-id) (dns-name-query-pair name)))
+
+(defn hostname-matches? [expected :string actual :string] :i64
+  ;; zone-by-name: (= name (:name zone))
+  ;; workers/custom-domains filter: (= hostname (:hostname binding))
+  ;; pages/project-by-domain: (some #{domain} (:domains project))
+  (if (string=? expected actual) 1 0))
