@@ -4,39 +4,54 @@
   W6 product-shell: pure REST path/query via kotoba zones_path_core
   (+ workers_path list-zones/dns base strings for parity)."
   (:require [cloudflare.client :as client]
-            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+            [cloudflare.kotoba.oracle :as oracle]))
 
 (def ^:private oid :zones-path)
 
-#?(:clj
-   (defn- o [export args]
-     (oracle/call oid export args)))
+(defn- o [export args]
+  (oracle/call oid export args))
+
+(defn- oracle-ready? []
+  (oracle/ready? oid))
+
+(defn- try-oracle
+  [thunk mirror-thunk]
+  (if (oracle-ready?)
+    (try
+      (thunk)
+      (catch #?(:clj Exception :cljs :default) _
+        (mirror-thunk)))
+    (mirror-thunk)))
 
 (defn list-zones-path
   "REST path for zone listing (no query). JVM: kotoba `list-zones-path`."
   []
-  #?(:clj (o 'list-zones-path [])
-     :cljs "/zones"))
+  (try-oracle
+   #(o 'list-zones-path [])
+   (fn [] "/zones")))
 
 (defn list-zones-request-path
   "Path+query string list-zones passes to rest! (`/zones?per_page=50`).
    JVM: kotoba `list-zones-request-path`."
   []
-  #?(:clj (o 'list-zones-request-path [])
-     :cljs "/zones?per_page=50"))
+  (try-oracle
+   #(o 'list-zones-request-path [])
+   (fn [] "/zones?per_page=50")))
 
 (defn dns-records-path
   "REST path for DNS records under a zone. JVM: kotoba `dns-records-path`."
   [zone-id]
-  #?(:clj (o 'dns-records-path [(str zone-id)])
-     :cljs (str "/zones/" zone-id "/dns_records")))
+  (try-oracle
+   #(o 'dns-records-path [(str zone-id)])
+   #(str "/zones/" zone-id "/dns_records")))
 
 (defn hostname-matches?
   "Exact hostname/name equality used by zone-by-name and domain filters.
    JVM: kotoba `hostname-matches?`."
   [expected actual]
-  #?(:clj (= 1 (o 'hostname-matches? [(str expected) (str actual)]))
-     :cljs (= expected actual)))
+  (try-oracle
+   #(= 1 (oracle/i64->host (o 'hostname-matches? [(str expected) (str actual)])))
+   #(= expected actual)))
 
 #?(:clj
 (defn list-zones

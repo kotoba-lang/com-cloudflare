@@ -13,34 +13,48 @@
 
   W6 product-shell: pure REST paths via kotoba workers_path_core."
   (:require [cloudflare.client :as client]
-            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+            [cloudflare.kotoba.oracle :as oracle]))
 
 (def ^:private oid :workers-path)
 
-#?(:clj
-   (defn- o [export args]
-     (oracle/call oid export args)))
+(defn- o [export args]
+  (oracle/call oid export args))
+
+(defn- oracle-ready? []
+  (oracle/ready? oid))
+
+(defn- try-oracle
+  [thunk mirror-thunk]
+  (if (oracle-ready?)
+    (try
+      (thunk)
+      (catch #?(:clj Exception :cljs :default) _
+        (mirror-thunk)))
+    (mirror-thunk)))
 
 (defn zone-routes-path
   "REST path for zone-level Worker routes.
    JVM: kotoba `zone-routes-path`."
   [zone-id]
-  #?(:clj (o 'zone-routes-path [(str zone-id)])
-     :cljs (str "/zones/" zone-id "/workers/routes")))
+  (try-oracle
+   #(o 'zone-routes-path [(str zone-id)])
+   #(str "/zones/" zone-id "/workers/routes")))
 
 (defn custom-domains-path
   "REST path for account Workers Custom Domains.
    JVM: kotoba `custom-domains-path`."
   [account-id]
-  #?(:clj (o 'custom-domains-path [(str account-id)])
-     :cljs (str "/accounts/" account-id "/workers/domains")))
+  (try-oracle
+   #(o 'custom-domains-path [(str account-id)])
+   #(str "/accounts/" account-id "/workers/domains")))
 
 (defn scripts-path
   "REST path for account Worker scripts metadata.
    JVM: kotoba `scripts-path`."
   [account-id]
-  #?(:clj (o 'scripts-path [(str account-id)])
-     :cljs (str "/accounts/" account-id "/workers/scripts")))
+  (try-oracle
+   #(o 'scripts-path [(str account-id)])
+   #(str "/accounts/" account-id "/workers/scripts")))
 
 #?(:clj
 (defn zone-routes

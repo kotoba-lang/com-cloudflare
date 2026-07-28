@@ -24,31 +24,45 @@
 
   W6 product-shell: pure REST paths via kotoba logpush_path_core."
   (:require [cloudflare.client :as client]
-            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+            [cloudflare.kotoba.oracle :as oracle]))
 
 (def ^:private oid :logpush-path)
 
-#?(:clj
-   (defn- o [export args]
-     (oracle/call oid export args)))
+(defn- o [export args]
+  (oracle/call oid export args))
+
+(defn- oracle-ready? []
+  (oracle/ready? oid))
+
+(defn- try-oracle
+  [thunk mirror-thunk]
+  (if (oracle-ready?)
+    (try
+      (thunk)
+      (catch #?(:clj Exception :cljs :default) _
+        (mirror-thunk)))
+    (mirror-thunk)))
 
 (defn datasets-path
   "REST path for Logpush datasets. JVM: kotoba `datasets-path`."
   [zone-id]
-  #?(:clj (o 'datasets-path [(str zone-id)])
-     :cljs (str "/zones/" zone-id "/logpush/datasets")))
+  (try-oracle
+   #(o 'datasets-path [(str zone-id)])
+   #(str "/zones/" zone-id "/logpush/datasets")))
 
 (defn jobs-path
   "REST path for Logpush jobs collection. JVM: kotoba `jobs-path`."
   [zone-id]
-  #?(:clj (o 'jobs-path [(str zone-id)])
-     :cljs (str "/zones/" zone-id "/logpush/jobs")))
+  (try-oracle
+   #(o 'jobs-path [(str zone-id)])
+   #(str "/zones/" zone-id "/logpush/jobs")))
 
 (defn job-path
   "REST path for one Logpush job. JVM: kotoba `job-path`."
   [zone-id job-id]
-  #?(:clj (o 'job-path [(str zone-id) (str job-id)])
-     :cljs (str "/zones/" zone-id "/logpush/jobs/" job-id)))
+  (try-oracle
+   #(o 'job-path [(str zone-id) (str job-id)])
+   #(str "/zones/" zone-id "/logpush/jobs/" job-id)))
 
 #?(:clj
 (defn datasets

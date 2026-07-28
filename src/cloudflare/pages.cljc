@@ -4,20 +4,32 @@
 
   W6 product-shell: pure REST paths via kotoba workers_path_core."
   (:require [cloudflare.client :as client]
-            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+            [cloudflare.kotoba.oracle :as oracle]))
 
 (def ^:private oid :workers-path)
 
-#?(:clj
-   (defn- o [export args]
-     (oracle/call oid export args)))
+(defn- o [export args]
+  (oracle/call oid export args))
+
+(defn- oracle-ready? []
+  (oracle/ready? oid))
+
+(defn- try-oracle
+  [thunk mirror-thunk]
+  (if (oracle-ready?)
+    (try
+      (thunk)
+      (catch #?(:clj Exception :cljs :default) _
+        (mirror-thunk)))
+    (mirror-thunk)))
 
 (defn projects-path
   "REST path for Pages projects under an account.
    JVM: kotoba `pages-projects-path`."
   [account-id]
-  #?(:clj (o 'pages-projects-path [(str account-id)])
-     :cljs (str "/accounts/" account-id "/pages/projects")))
+  (try-oracle
+   #(o 'pages-projects-path [(str account-id)])
+   #(str "/accounts/" account-id "/pages/projects")))
 
 #?(:clj
 (defn projects

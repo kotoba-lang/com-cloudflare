@@ -24,13 +24,24 @@
   instead of forcing a JVM into that path."
   (:require [clojure.string :as str]
             [cloudflare.client :as client]
-            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+            [cloudflare.kotoba.oracle :as oracle]))
 
 (def ^:private oid :stream)
 
-#?(:clj
-   (defn- o [export args]
-     (oracle/call oid export args)))
+(defn- o [export args]
+  (oracle/call oid export args))
+
+(defn- oracle-ready? []
+  (oracle/ready? oid))
+
+(defn- try-oracle
+  [thunk mirror-thunk]
+  (if (oracle-ready?)
+    (try
+      (thunk)
+      (catch #?(:clj Exception :cljs :default) _
+        (mirror-thunk)))
+    (mirror-thunk)))
 
 ;; ---------------------------------------------------------------------------
 ;; Known RTMP destinations
@@ -58,10 +69,12 @@
    JVM: kotoba `destination-url` (empty ≡ unknown)."
   ([platform] (destination-url platform :rtmps))
   ([platform variant]
-   #?(:clj (let [u (o 'destination-url
-                      [(name (keyword platform)) (name (keyword variant))])]
-             (when-not (str/blank? u) u))
-      :cljs (get-in destinations [(keyword platform) (keyword variant)]))))
+   (try-oracle
+    (fn []
+      (let [u (o 'destination-url
+                 [(name (keyword platform)) (name (keyword variant))])]
+        (when-not (str/blank? u) u)))
+    #(get-in destinations [(keyword platform) (keyword variant)]))))
 
 (defn redact-key
   "A stream key rendered safe to print: first 4 characters, then the length.
@@ -70,13 +83,14 @@
   terminal scrollback, a CI log, or a screenshot.
    JVM: kotoba `redact-key`."
   [stream-key]
-  #?(:clj (o 'redact-key [(str (or stream-key ""))])
-     :cljs
+  (try-oracle
+   #(o 'redact-key [(str (or stream-key ""))])
+   (fn []
      (let [k (str stream-key)]
        (cond
          (str/blank? k) "<blank>"
          (<= (count k) 4) (str "<" (count k) " chars>")
-         :else (str (subs k 0 4) "…<" (count k) " chars>")))))
+         :else (str (subs k 0 4) "…<" (count k) " chars>"))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Validation
@@ -103,9 +117,11 @@
 
    JVM: kotoba `validate-flags` bitset decoded to keywords."
   [{:keys [url stream-key]}]
-  #?(:clj
-     (let [flags (long (o 'validate-flags
-                          [(str (or url "")) (str (or stream-key ""))]))]
+  (try-oracle
+   (fn []
+     (let [flags (oracle/i64->host
+                  (o 'validate-flags
+                     [(str (or url "")) (str (or stream-key ""))]))]
        (into []
              (keep (fn [[bit kw]]
                      (when (pos? (bit-and flags bit)) kw)))
@@ -113,8 +129,8 @@
               [2 :bad-scheme]
               [4 :missing-stream-key]
               [8 :whitespace-in-key]
-              [16 :key-embedded-in-url]]))
-     :cljs
+              [16 :key-embedded-in-url]])))
+   (fn []
      (let [url (str url)
            k (str stream-key)]
        (cond-> []
@@ -125,7 +141,7 @@
          (and (not (str/blank? k))
               (re-find #"\s" k)) (conj :whitespace-in-key)
          (and (not (str/blank? k))
-              (str/includes? url k)) (conj :key-embedded-in-url)))))
+              (str/includes? url k)) (conj :key-embedded-in-url))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Pure request builders
@@ -138,20 +154,23 @@
 (defn inputs-path
   "REST path for live inputs collection. JVM: kotoba `inputs-path`."
   [account-id]
-  #?(:clj (o 'inputs-path [(str account-id)])
-     :cljs (str "/accounts/" account-id "/stream/live_inputs")))
+  (try-oracle
+   #(o 'inputs-path [(str account-id)])
+   #(str "/accounts/" account-id "/stream/live_inputs")))
 
 (defn live-input-path
   "REST path for one live input. JVM: kotoba `live-input-path`."
   [account-id input-uid]
-  #?(:clj (o 'live-input-path [(str account-id) (str input-uid)])
-     :cljs (str (inputs-path account-id) "/" input-uid)))
+  (try-oracle
+   #(o 'live-input-path [(str account-id) (str input-uid)])
+   #(str (inputs-path account-id) "/" input-uid)))
 
 (defn outputs-path
   "REST path for live outputs under an input. JVM: kotoba `outputs-path`."
   [account-id input-uid]
-  #?(:clj (o 'outputs-path [(str account-id) (str input-uid)])
-     :cljs (str (live-input-path account-id input-uid) "/outputs")))
+  (try-oracle
+   #(o 'outputs-path [(str account-id) (str input-uid)])
+   #(str (live-input-path account-id input-uid) "/outputs")))
 
 (defn create-live-input-request
   "POST a new live input.
@@ -257,18 +276,18 @@
   same reason the destination key is.
    JVM: kotoba `live-input-summary`."
   [{:keys [uid name whip-url rtmps-url rtmps-stream-key]}]
-  #?(:clj (o 'live-input-summary
-             [(str (or uid ""))
-              (str (or name ""))
-              (str (or whip-url "-"))
-              (str (or rtmps-url "-"))
-              (str (or rtmps-stream-key ""))])
-     :cljs
-     (str "live-input " uid
-          (when name (str " (" name ")"))
-          " whip=" (or whip-url "-")
-          " rtmps=" (or rtmps-url "-")
-          " key=" (redact-key rtmps-stream-key))))
+  (try-oracle
+   #(o 'live-input-summary
+       [(str (or uid ""))
+        (str (or name ""))
+        (str (or whip-url "-"))
+        (str (or rtmps-url "-"))
+        (str (or rtmps-stream-key ""))])
+   #(str "live-input " uid
+         (when name (str " (" name ")"))
+         " whip=" (or whip-url "-")
+         " rtmps=" (or rtmps-url "-")
+         " key=" (redact-key rtmps-stream-key))))
 
 ;; ---------------------------------------------------------------------------
 ;; :clj convenience layer
