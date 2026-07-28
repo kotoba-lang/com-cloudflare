@@ -55,3 +55,48 @@
                   {:status 200 :body "{\"success\":true,\"result\":null}"})]
     (deploy/delete-worker-script! "acct1" "my-worker" {:http-fn http-fn :token "t"})
     (is (= :delete (:method @captured))))))
+
+(deftest module-metadata-and-multipart-pure
+  (is (= {:main_module "main.js"}
+         (deploy/module-metadata {:main-module "main.js"})))
+  (is (= :deploy/module-escape (deploy/validate-module-name "../x.js")))
+  (let [body (deploy/encode-multipart "bnd"
+               [{:name "metadata" :content-type "application/json" :body "{}"}
+                {:name "main.js" :filename "main.js"
+                 :content-type "application/javascript+module"
+                 :body "export default {}"}])]
+    (is (str/includes? body "name=\"metadata\""))
+    (is (str/includes? body "name=\"main.js\""))
+    (is (str/includes? body "export default {}"))
+    (is (str/ends-with? body "--bnd--\r\n")))
+  (let [plan (deploy/workers-module-put-plan
+              "acct1" "mod-worker"
+              {"main.js" "export default { async fetch(){ return new Response('ok') } }"}
+              {:main-module "main.js"
+               :compatibility-date "2024-01-01"
+               :boundary "testbound"})]
+    (is (= :put (:method plan)))
+    (is (str/starts-with? (:content-type plan) "multipart/form-data; boundary="))
+    (is (str/includes? (:body plan) "main_module"))
+    (is (str/includes? (:body plan) "export default"))
+    (is (= "main.js" (get-in plan [:metadata :main_module]))))
+  (is (thrown-with-msg? #?(:clj Exception :cljs js/Error) #"main_module missing"
+        (deploy/workers-module-put-plan "a" "w" {"other.js" "x"}
+                                        {:main-module "main.js"}))))
+
+#?(:clj
+(deftest put-worker-module-multipart-live-shape
+  (let [captured (atom nil)
+        http-fn (fn [req]
+                  (reset! captured req)
+                  {:status 200 :body "{\"success\":true,\"result\":{\"id\":\"m1\"}}"})]
+    (is (= {:id "m1"}
+           (deploy/put-worker-module!
+            "acct1" "mod-worker"
+            {"main.js" "export default {}"}
+            {:http-fn http-fn :token "t" :boundary "livebound"
+             :main-module "main.js"})))
+    (is (= :put (:method @captured)))
+    (is (str/includes? (get (:headers @captured) "Content-Type") "multipart/form-data"))
+    (is (str/includes? (:body @captured) "name=\"metadata\""))
+    (is (str/includes? (:body @captured) "name=\"main.js\"")))))
