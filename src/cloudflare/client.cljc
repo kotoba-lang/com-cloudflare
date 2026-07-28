@@ -44,13 +44,50 @@
                       (java.net.http.HttpResponse$BodyHandlers/ofString))]
        {:status (.statusCode resp) :body (.body resp)})))))
 
+;; Named secret identity for W6 secret-custody kit (provider.secret id 21 /
+;; secret-transport ADR 0145–0146). Hosts inject :fetch with the same reply
+;; shape; default path reads only CLOUDFLARE_API_TOKEN by exact name.
+(def api-token-secret-name "cloudflare-api-token")
+(def api-token-env-name "CLOUDFLARE_API_TOKEN")
+
+#?(:clj
+(defn env-token-fetch
+  "Default host fetch transport: exact env var only (no process-env dump).
+
+  Reply shape matches provider.secret-transport:
+  `{:tag :value :value s}` | `{:tag :error :code :message}`."
+  []
+  (fn [{:keys [name]}]
+    (if (= name api-token-secret-name)
+      (if-let [v (System/getenv api-token-env-name)]
+        (if (str/blank? v)
+          {:tag :error :code :secret/empty :message "CLOUDFLARE_API_TOKEN empty"}
+          {:tag :value :value v})
+        {:tag :error :code :secret/not-found :message "CLOUDFLARE_API_TOKEN not set"})
+      {:tag :error :code :secret/not-found :message "no env mapping"}))))
+
 #?(:clj
 (defn api-token
-  "CLOUDFLARE_API_TOKEN from the environment, or throw. Callers can always
-  override via an explicit :token in opts instead of relying on env."
-  []
-  (or (System/getenv "CLOUDFLARE_API_TOKEN")
-      (throw (ex-info "CLOUDFLARE_API_TOKEN is required" {})))))
+  "Resolve the Cloudflare API token under the named-secret contract.
+
+  Preference order:
+  1. explicit `:token` string
+  2. `:fetch` one-shot `(fn [{:keys [name]}] reply)` — kit-compatible;
+     wire `provider.secret-transport/env-fetch`, `fn-fetch` (kagi), or
+     `keychain-fetch` here
+  3. default env-token-fetch (exact CLOUDFLARE_API_TOKEN only)
+
+  Never enumerates process environment keys."
+  ([] (api-token {}))
+  ([{:keys [token fetch] :or {fetch (env-token-fetch)}}]
+   (or (when (and (string? token) (not (str/blank? token))) token)
+       (let [reply (fetch {:name api-token-secret-name})]
+         (when (and (map? reply) (= :value (:tag reply)))
+           (let [v (str (:value reply))]
+             (when-not (str/blank? v) v))))
+       (throw (ex-info "CLOUDFLARE_API_TOKEN is required"
+                       {:secret-name api-token-secret-name
+                        :env-name api-token-env-name}))))))
 
 #?(:clj
 (defn- auth-headers [token]
@@ -58,16 +95,25 @@
    "Content-Type" "application/json"}))
 
 #?(:clj
+(defn- resolve-token
+  "Pick explicit :token or resolve via named-secret :fetch."
+  [{:keys [token fetch] :as opts}]
+  (or (when (and (string? token) (not (str/blank? token))) token)
+      (api-token (cond-> {} fetch (assoc :fetch fetch))))))
+
+#?(:clj
 (defn graphql!
   "POST `request-body` ({:query :variables}) to the Analytics GraphQL API.
   Returns the parsed JSON response ({:data ... :errors ...}), never
   throws on a GraphQL-level error (callers check :errors) -- only throws on
-  a transport-level non-2xx HTTP status."
+  a transport-level non-2xx HTTP status.
+
+  Auth: `:token` string, or `:fetch` kit-shaped secret getter (see api-token)."
   ([request-body] (graphql! request-body {}))
-  ([request-body {:keys [http-fn token] :or {http-fn (jvm-http-fn)}}]
+  ([request-body {:keys [http-fn] :or {http-fn (jvm-http-fn)} :as opts}]
    (let [resp (http-fn {:url graphql-endpoint
                         :method :post
-                        :headers (auth-headers (or token (api-token)))
+                        :headers (auth-headers (resolve-token opts))
                         :body (json/write-str request-body)})]
      (when-not (< (:status resp) 300)
        (throw (ex-info "Cloudflare GraphQL request failed" {:status (:status resp) :body (:body resp)})))
@@ -80,14 +126,16 @@
   parsed JSON response's :result on success; throws (with the full
   response) on a transport-level non-2xx status OR a Cloudflare-level
   {:success false} response -- REST errors are structural, unlike GraphQL's
-  partial-success shape, so failing closed here is the safer default."
+  partial-success shape, so failing closed here is the safer default.
+
+  Auth: `:token` string, or `:fetch` kit-shaped secret getter (see api-token)."
   ([path] (rest! path {}))
-  ([path {:keys [method body http-fn token query] :or {method :get http-fn (jvm-http-fn)}}]
+  ([path {:keys [method body http-fn query] :or {method :get http-fn (jvm-http-fn)} :as opts}]
    (let [query-string (when (seq query)
                         (str "?" (str/join "&" (map (fn [[k v]] (str (name k) "=" v)) query))))
          resp (http-fn (cond-> {:url (str api-base path query-string)
                                 :method method
-                                :headers (auth-headers (or token (api-token)))}
+                                :headers (auth-headers (resolve-token opts))}
                         body (assoc :body (json/write-str body))))
          parsed (json/read-str (:body resp) :key-fn keyword)]
      (when-not (and (< (:status resp) 300) (:success parsed))
