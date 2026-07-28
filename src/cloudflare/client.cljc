@@ -16,12 +16,28 @@
   {:status :body}` convention used throughout kotoba-lang/gftdcojp's other
   HTTP-calling namespaces (cloud-itonami.runtime/jvm-http-fn,
   cloud-itonami.mail/jvm-http-fn) -- so every namespace here is testable
-  with a stub, never only against a live account."
-  (:require [clojure.string :as str]
-            #?(:clj [clojure.data.json :as json])))
+  with a stub, never only against a live account.
 
-(def api-base "https://api.cloudflare.com/client/v4")
-(def graphql-endpoint (str api-base "/graphql"))
+  W6 product-shell authority (ADR-0011):
+  On the JVM, constants + URL/auth pure helpers DELEGATE to precompiled
+  client_core.kir.edn. HTTP/JSON/getenv stay host."
+  (:require [clojure.string :as str]
+            #?(:clj [clojure.data.json :as json])
+            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+
+(def ^:private oid :client)
+
+#?(:clj
+   (defn- o [export args]
+     (oracle/call oid export args)))
+
+(def api-base
+  #?(:clj (o 'api-base [])
+     :cljs "https://api.cloudflare.com/client/v4"))
+
+(def graphql-endpoint
+  #?(:clj (o 'graphql-endpoint [])
+     :cljs (str api-base "/graphql")))
 
 #?(:clj
 (defn jvm-http-fn
@@ -50,8 +66,54 @@
 ;; Named secret identity for W6 secret-custody kit (provider.secret id 21 /
 ;; secret-transport ADR 0145–0146). Hosts inject :fetch with the same reply
 ;; shape; default path reads only CLOUDFLARE_API_TOKEN by exact name.
-(def api-token-secret-name "cloudflare-api-token")
-(def api-token-env-name "CLOUDFLARE_API_TOKEN")
+(def api-token-secret-name
+  #?(:clj (o 'api-token-secret-name [])
+     :cljs "cloudflare-api-token"))
+
+(def api-token-env-name
+  #?(:clj (o 'api-token-env-name [])
+     :cljs "CLOUDFLARE_API_TOKEN"))
+
+(defn bearer-auth
+  "Authorization header value. JVM: kotoba `bearer-auth`."
+  [token]
+  #?(:clj (o 'bearer-auth [(str token)])
+     :cljs (str "Bearer " token)))
+
+(defn rest-url
+  "Absolute REST URL for path + query string (no leading `?` in qs).
+   JVM: kotoba `rest-url`."
+  [path qs]
+  #?(:clj (o 'rest-url [(str path) (str (or qs ""))])
+     :cljs (if (str/blank? qs)
+             (str api-base path)
+             (str api-base path "?" qs))))
+
+(defn query-pair
+  "One `k=v` query fragment. JVM: kotoba `query-pair`."
+  [k v]
+  #?(:clj (o 'query-pair [(str k) (str v)])
+     :cljs (str k "=" v)))
+
+(defn transport-ok?
+  "True when HTTP status is a 2xx. JVM: kotoba `transport-ok?`."
+  [status]
+  #?(:clj (= 1 (o 'transport-ok? [(long status)]))
+     :cljs (< status 300)))
+
+(defn prefer-explicit-token?
+  "True when a non-blank explicit token should win over fetch.
+   JVM: kotoba `prefer-explicit-token?`."
+  [token]
+  #?(:clj (= 1 (o 'prefer-explicit-token? [(str (or token ""))]))
+     :cljs (and (string? token) (not (str/blank? token)))))
+
+(defn secret-name-matches?
+  "True when `name` is the api-token secret id.
+   JVM: kotoba `secret-name-matches?`."
+  [name]
+  #?(:clj (= 1 (o 'secret-name-matches? [(str name)]))
+     :cljs (= name api-token-secret-name)))
 
 #?(:clj
 (defn env-token-fetch
@@ -61,7 +123,7 @@
   `{:tag :value :value s}` | `{:tag :error :code :message}`."
   []
   (fn [{:keys [name]}]
-    (if (= name api-token-secret-name)
+    (if (secret-name-matches? name)
       (if-let [v (System/getenv api-token-env-name)]
         (if (str/blank? v)
           {:tag :error :code :secret/empty :message "CLOUDFLARE_API_TOKEN empty"}
@@ -83,7 +145,7 @@
   Never enumerates process environment keys."
   ([] (api-token {}))
   ([{:keys [token fetch] :or {fetch (env-token-fetch)}}]
-   (or (when (and (string? token) (not (str/blank? token))) token)
+   (or (when (prefer-explicit-token? token) token)
        (let [reply (fetch {:name api-token-secret-name})]
          (when (and (map? reply) (= :value (:tag reply)))
            (let [v (str (:value reply))]
@@ -96,14 +158,14 @@
 (defn- auth-headers
   ([token] (auth-headers token "application/json"))
   ([token content-type]
-   (cond-> {"Authorization" (str "Bearer " token)}
+   (cond-> {"Authorization" (bearer-auth token)}
      content-type (assoc "Content-Type" content-type)))))
 
 #?(:clj
 (defn- resolve-token
   "Pick explicit :token or resolve via named-secret :fetch."
   [{:keys [token fetch] :as opts}]
-  (or (when (and (string? token) (not (str/blank? token))) token)
+  (or (when (prefer-explicit-token? token) token)
       (api-token (cond-> {} fetch (assoc :fetch fetch))))))
 
 #?(:clj
@@ -120,7 +182,7 @@
                         :method :post
                         :headers (auth-headers (resolve-token opts))
                         :body (json/write-str request-body)})]
-     (when-not (< (:status resp) 300)
+     (when-not (transport-ok? (:status resp))
        (throw (ex-info "Cloudflare GraphQL request failed" {:status (:status resp) :body (:body resp)})))
      (json/read-str (:body resp) :key-fn keyword)))))
 
@@ -138,8 +200,9 @@
   ([path {:keys [method body http-fn query content-type raw-body?]
           :or {method :get http-fn (jvm-http-fn) content-type "application/json"}
           :as opts}]
-   (let [query-string (when (seq query)
-                        (str "?" (str/join "&" (map (fn [[k v]] (str (name k) "=" v)) query))))
+   (let [qs (when (seq query)
+              (str/join "&" (map (fn [[k v]] (query-pair (name k) v)) query)))
+         url (rest-url path (or qs ""))
          ;; Deploy uploads may send raw JS (`raw-body?` true); default JSON-encodes maps.
          body-str (cond
                     (nil? body) nil
@@ -152,12 +215,12 @@
                            (not raw-body?))
                     (str body)
                     body-str)
-         resp (http-fn (cond-> {:url (str api-base path query-string)
+         resp (http-fn (cond-> {:url url
                                 :method method
                                 :headers (auth-headers (resolve-token opts) content-type)}
                         body-str (assoc :body body-str)))
          parsed (json/read-str (:body resp) :key-fn keyword)]
-     (when-not (and (< (:status resp) 300) (:success parsed))
+     (when-not (and (transport-ok? (:status resp)) (:success parsed))
        (throw (ex-info "Cloudflare REST request failed"
                        {:status (:status resp) :path path :errors (:errors parsed)})))
      (:result parsed)))))
