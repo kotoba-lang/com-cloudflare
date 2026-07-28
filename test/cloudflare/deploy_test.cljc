@@ -100,3 +100,52 @@
     (is (str/includes? (get (:headers @captured) "Content-Type") "multipart/form-data"))
     (is (str/includes? (:body @captured) "name=\"metadata\""))
     (is (str/includes? (:body @captured) "name=\"main.js\"")))))
+
+(deftest pages-asset-path-and-manifest
+  (is (nil? (deploy/validate-asset-path "index.html")))
+  (is (= :deploy/asset-escape (deploy/validate-asset-path "../x")))
+  (is (= :deploy/absolute-asset (deploy/validate-asset-path "/etc/passwd")))
+  (let [mf (deploy/pages-asset-manifest
+            {"index.html" "<html/>" "a.css" "body{}"}
+            {:hash-fn (fn [s] (str "h-" (count s)))})]
+    (is (= "h-7" (get mf "index.html")))
+    (is (= "h-6" (get mf "a.css"))))
+  (is (= #{"aa"} (deploy/pages-missing-hashes
+                  {"i.html" "aa" "j.html" "bb"} #{"bb"}))))
+
+(deftest pages-bulk-deploy-plan-steps
+  (let [plan (deploy/pages-bulk-deploy-plan
+              "acct1" "site"
+              {"index.html" "<html>hi</html>"}
+              {:hash-fn (fn [_] "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+               :boundary "pgbound"})]
+    (is (map? (:manifest plan)))
+    (is (= 1 (count (:missing-hashes plan))))
+    (is (= 3 (count (:steps plan))))
+    (is (= :pages/upload-token (:op (nth (:steps plan) 0))))
+    (is (= :get (:method (nth (:steps plan) 0))))
+    (is (= :pages/upload-assets (:op (nth (:steps plan) 1))))
+    (is (= :pages/create-deployment (:op (nth (:steps plan) 2))))
+    (is (str/includes? (:body (nth (:steps plan) 2)) "name=\"manifest\"")))
+  (let [plan (deploy/pages-bulk-deploy-plan
+              "acct1" "site"
+              {"index.html" "x"}
+              {:hash-fn (fn [_] "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+               :known-hashes #{"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}})]
+    (is (empty? (:missing-hashes plan)))
+    (is (= 2 (count (:steps plan))) "skip upload when all hashes known")))
+
+#?(:clj
+(deftest create-pages-deployment-live-shape
+  (let [captured (atom nil)
+        http-fn (fn [req]
+                  (reset! captured req)
+                  {:status 200 :body "{\"success\":true,\"result\":{\"id\":\"d1\"}}"})]
+    (is (= {:id "d1"}
+           (deploy/create-pages-deployment!
+            "acct1" "site" {"index.html" "<html/>"}
+            {:http-fn http-fn :token "t" :boundary "pg"
+             :hash-fn (fn [_] "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc")})))
+    (is (= :post (:method @captured)))
+    (is (str/includes? (:url @captured) "/pages/projects/site/deployments"))
+    (is (str/includes? (:body @captured) "manifest")))))
