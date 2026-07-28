@@ -1,0 +1,105 @@
+(ns stream-core
+  (:export [api-base digit-char nat-str i64-str blank?
+            rtmp-scheme? has-whitespace? redact-key validate-flags
+            destination-url inputs-path live-input-path outputs-path]))
+
+;; W6 cloudflare-pure-request-v1 — pure stream validate/redact/path core.
+;; Request map builders and *! HTTP stay cljc. No capabilities.
+;; validate-flags bits: 1 missing-url | 2 bad-scheme | 4 missing-stream-key
+;;   | 8 whitespace-in-key | 16 key-embedded-in-url (same order as cljc cond->).
+;; Parity: test/cloudflare/stream_kotoba_parity_test.clj
+
+(defn api-base [] :string
+  "https://api.cloudflare.com/client/v4")
+
+(defn digit-char [d :i64] :string
+  (string-substring "0123456789" d (+ d 1)))
+
+(defn nat-str [n :i64] :string
+  (if (< n 10)
+    (digit-char n)
+    (string-concat (nat-str (quot n 10))
+                   (digit-char (- n (* (quot n 10) 10))))))
+
+(defn i64-str [n :i64] :string
+  (if (< n 0)
+    (string-concat "-" (nat-str (- 0 n)))
+    (nat-str n)))
+
+(defn blank? [s :string] :i64
+  (if (string=? s "") 1 0))
+
+(defn rtmp-scheme? [url :string] :i64
+  ;; cljc: (re-find #"^rtmps?://" url)
+  (let [n (string-byte-length url)]
+    (if (< n 7)
+      0
+      (if (string=? (string-substring url 0 7) "rtmp://")
+        1
+        (if (< n 8)
+          0
+          (if (string=? (string-substring url 0 8) "rtmps://") 1 0))))))
+
+(defn has-whitespace? [s :string] :i64
+  ;; cljc: (re-find #"\s" k) — space / tab / newline
+  (if (string-contains? s " ")
+    1
+    (if (string-contains? s "\n")
+      1
+      (if (string-contains? s "\t") 1 0))))
+
+(defn redact-key [stream-key :string] :string
+  ;; cljc uses unicode ellipsis … (U+2026)
+  (if (string=? stream-key "")
+    "<blank>"
+    (let [n (string-byte-length stream-key)]
+      (if (< n 5)
+        (string-concat "<" (string-concat (i64-str n) " chars>"))
+        (string-concat
+         (string-substring stream-key 0 4)
+         (string-concat "…<" (string-concat (i64-str n) " chars>")))))))
+
+(defn validate-flags [url :string stream-key :string] :i64
+  (let [url-blank (blank? url)
+        key-blank (blank? stream-key)
+        f0 (if (= url-blank 1) 1 0)
+        f1 (if (= url-blank 1)
+             0
+             (if (= (rtmp-scheme? url) 1) 0 2))
+        f2 (if (= key-blank 1) 4 0)
+        f3 (if (= key-blank 1)
+             0
+             (if (= (has-whitespace? stream-key) 1) 8 0))
+        f4 (if (= key-blank 1)
+             0
+             (if (string-contains? url stream-key) 16 0))]
+    (+ f0 (+ f1 (+ f2 (+ f3 f4))))))
+
+(defn destination-url [platform :string variant :string] :string
+  ;; empty string ≡ cljc nil (unknown platform/variant)
+  (if (string=? platform "youtube")
+    (if (string=? variant "rtmps")
+      "rtmps://a.rtmps.youtube.com/live2"
+      (if (string=? variant "rtmp")
+        "rtmp://a.rtmp.youtube.com/live2"
+        (if (string=? variant "rtmp-backup")
+          "rtmp://b.rtmp.youtube.com/live2?backup=1"
+          "")))
+    (if (string=? platform "twitch")
+      (if (string=? variant "rtmps")
+        "rtmps://live.twitch.tv/app"
+        (if (string=? variant "rtmp")
+          "rtmp://live.twitch.tv/app"
+          ""))
+      "")))
+
+(defn inputs-path [account-id :string] :string
+  (string-concat "/accounts/"
+                 (string-concat account-id "/stream/live_inputs")))
+
+(defn live-input-path [account-id :string input-uid :string] :string
+  (string-concat (inputs-path account-id)
+                 (string-concat "/" input-uid)))
+
+(defn outputs-path [account-id :string input-uid :string] :string
+  (string-concat (live-input-path account-id input-uid) "/outputs"))

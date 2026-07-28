@@ -2,8 +2,18 @@
  :deps {org.clojure/data.json {:mvn/version "2.5.0"}}
  :aliases
  {:test {:extra-paths ["test"]
+         ;; kotoba-lang/compiler is TEST-ONLY for the W6 pure-request oracle
+         ;; parity gate (kotoba/stream_core.kotoba). Override abi to the pin
+         ;; compiler expects so component/wit loads cleanly in the test JVM.
+         :override-deps
+         {io.github.kotoba-lang/abi
+          {:git/url "https://github.com/kotoba-lang/abi.git"
+           :git/sha "34415ce9bf2b8d37d5bc8259ba7e00f5d091eb44"}}
          :extra-deps {io.github.cognitect-labs/test-runner
-                      {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+                      {:git/tag "v0.5.1" :git/sha "dfb30dd"}
+                      io.github.kotoba-lang/compiler
+                      {:git/url "https://github.com/kotoba-lang/compiler.git"
+                       :git/sha "c2c8693ec5a1288ecbc882f16518ec81cb6b70d7"}}
          :main-opts ["-m" "cognitect.test-runner"]
          :exec-fn cognitect.test-runner.api/test}
 
