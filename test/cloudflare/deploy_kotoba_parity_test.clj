@@ -11,12 +11,18 @@
 (def port-source (slurp "kotoba/deploy_core.kotoba"))
 
 (def export-prefix
-  (str "max-account-id max-script-name max-script-bytes blank? ws? "
+  (str "max-account-id max-script-name max-script-bytes "
+       "max-module-name max-modules blank? ws? "
        "alnum-char? account-char? account-body-ok? script-body-ok? "
+       "module-char? module-body-ok? "
        "validate-account-id validate-script-name validate-project-name "
-       "put-content-type workers-script-path pages-project-path "
+       "validate-module-name put-content-type module-js-content-type "
+       "metadata-content-type workers-script-path pages-project-path "
        "pages-deployments-path put-method delete-method "
-       "script-body-ok-size? wrangler-pages-deploy-cmd directory-ok?"))
+       "script-body-ok-size? modules-count-ok? boundary-ok? "
+       "multipart-content-type multipart-part multipart-close "
+       "encode-parts encode-parts-close "
+       "wrangler-pages-deploy-cmd directory-ok?"))
 
 (defn- kotoba-literal [s]
   (str \" (-> (str s) (str/replace "\\" "\\\\") (str/replace "\"" "\\\"")) \"))
@@ -54,15 +60,23 @@
   (let [actual (compile-i64-cases
                 {"ma" "(max-account-id)"
                  "ms" "(max-script-name)"
-                 "mb" "(max-script-bytes)"})
+                 "mb" "(max-script-bytes)"
+                 "mm" "(max-module-name)"
+                 "mn" "(max-modules)"})
         s (compile-string-cases
            {"ct" "(put-content-type)"
+            "mct" "(module-js-content-type)"
+            "jct" "(metadata-content-type)"
             "pm" "(put-method)"
             "dm" "(delete-method)"})]
     (is (= deploy/max-account-id (get actual "ma")))
     (is (= deploy/max-script-name (get actual "ms")))
     (is (= deploy/max-script-bytes (get actual "mb")))
+    (is (= deploy/max-module-name (get actual "mm")))
+    (is (= deploy/max-modules (get actual "mn")))
     (is (= "application/javascript" (get s "ct")))
+    (is (= "application/javascript+module" (get s "mct")))
+    (is (= "application/json" (get s "jct")))
     (is (= "put" (get s "pm")))
     (is (= "delete" (get s "dm")))))
 
@@ -153,3 +167,79 @@
     (is (= 1 (get size "small")))
     (is (= 1 (get size "exact")))
     (is (= 0 (get size "over")))))
+
+(deftest validate-module-name-matches-deploy
+  (let [corpus ["" "   "
+                "main.js" "src/index.mjs" "a" "Worker_1.mjs"
+                "../x.js" "/abs.js" "has space.js" "bad!.js"
+                (str "a" (apply str (repeat 10 "..")) "z.js")
+                (apply str (repeat 129 "a"))]
+        cases (into {} (map-indexed
+                        (fn [i s]
+                          [(str "vm_" i)
+                           (str "(validate-module-name " (kotoba-literal s) ")")])
+                        corpus))
+        actual (compile-string-cases cases)]
+    (doseq [[i s] (map-indexed vector corpus)]
+      (testing (pr-str s)
+        (is (= (err-tag (deploy/validate-module-name s))
+               (get actual (str "vm_" i))))))))
+
+(deftest multipart-encode-matches-deploy
+  (let [boundary "bnd"
+        meta-body "{}"
+        mod-body "export default {}"
+        cljc (deploy/encode-multipart
+              boundary
+              [{:name "metadata" :content-type "application/json" :body meta-body}
+               {:name "main.js" :filename "main.js"
+                :content-type "application/javascript+module"
+                :body mod-body}])
+        ;; ABI ≤5: build parts then join+close (mirrors cljc map over parts)
+        part1 (str "(multipart-part " (kotoba-literal boundary) " "
+                   (kotoba-literal "metadata") " \"\" "
+                   (kotoba-literal "application/json") " "
+                   (kotoba-literal meta-body) ")")
+        part2 (str "(multipart-part " (kotoba-literal boundary) " "
+                   (kotoba-literal "main.js") " "
+                   (kotoba-literal "main.js") " "
+                   (kotoba-literal "application/javascript+module") " "
+                   (kotoba-literal mod-body) ")")
+        actual (compile-string-cases
+                {"p1" part1
+                 "p2" part2
+                 "enc" (str "(encode-parts-close (encode-parts " part1 " " part2 ") "
+                            (kotoba-literal boundary) ")")
+                 "ct" (str "(multipart-content-type " (kotoba-literal boundary) ")")
+                 "close" (str "(multipart-close " (kotoba-literal boundary) ")")})
+        flags (compile-i64-cases
+               {"bok" (str "(boundary-ok? " (kotoba-literal "ok-bound") ")")
+                "bblank" (str "(boundary-ok? " (kotoba-literal "") ")")
+                "bspace" (str "(boundary-ok? " (kotoba-literal "has space") ")")
+                "bquote" (str "(boundary-ok? " (kotoba-literal "a\"b") ")")
+                "c0" "(modules-count-ok? 0)"
+                "c1" "(modules-count-ok? 1)"
+                "c16" "(modules-count-ok? 16)"
+                "c17" "(modules-count-ok? 17)"})]
+    (is (= cljc (get actual "enc")))
+    (is (str/ends-with? (get actual "enc") (get actual "close")))
+    (is (str/includes? (get actual "p1") "name=\"metadata\""))
+    (is (str/includes? (get actual "p2") "filename=\"main.js\""))
+    (is (= (str "multipart/form-data; boundary=" boundary) (get actual "ct")))
+    (is (= 1 (get flags "bok")))
+    (is (= 0 (get flags "bblank")))
+    (is (= 0 (get flags "bspace")))
+    (is (= 0 (get flags "bquote")))
+    (is (= 0 (get flags "c0")))
+    (is (= 1 (get flags "c1")))
+    (is (= 1 (get flags "c16")))
+    (is (= 0 (get flags "c17")))
+    (testing "module put-plan body uses same encode shape"
+      (let [plan (deploy/workers-module-put-plan
+                  "acct1" "mod-worker"
+                  {"main.js" mod-body}
+                  {:main-module "main.js" :boundary boundary})]
+        (is (str/includes? (:body plan) "name=\"metadata\""))
+        (is (str/includes? (:body plan) "name=\"main.js\""))
+        (is (str/starts-with? (:content-type plan)
+                              "multipart/form-data; boundary="))))))
