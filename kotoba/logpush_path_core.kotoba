@@ -1,0 +1,15 @@
+(ns logpush-path-core
+  (:export [datasets-path jobs-path job-path]))
+
+;; W6 cloudflare-pure-request-v1 — pure REST path construction for Logpush.
+;; create/delete *! HTTP and destination conf stay host.
+;; Parity: test/cloudflare/logpush_path_kotoba_parity_test.clj
+
+(defn datasets-path [zone-id :string] :string
+  (string-concat "/zones/" (string-concat zone-id "/logpush/datasets")))
+
+(defn jobs-path [zone-id :string] :string
+  (string-concat "/zones/" (string-concat zone-id "/logpush/jobs")))
+
+(defn job-path [zone-id :string job-id :string] :string
+  (string-concat (jobs-path zone-id) (string-concat "/" job-id)))
