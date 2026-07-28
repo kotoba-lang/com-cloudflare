@@ -20,19 +20,33 @@
     first before assuming a host-filtered zero means something is broken."
   (:require [clojure.string :as str]
             [cloudflare.client :as client]
-            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+            [cloudflare.kotoba.oracle :as oracle]))
 
 (def ^:private oid :analytics)
 (def ^:private parse-oid :analytics-parse)
 
-#?(:clj
-   (defn- o
-     ([export args] (oracle/call oid export args))
-     ([oracle-id export args] (oracle/call oracle-id export args))))
+(defn- o
+  ([export args] (oracle/call oid export args))
+  ([oracle-id export args] (oracle/call oracle-id export args)))
+
+(defn- oracle-ready?
+  ([] (oracle/ready? oid))
+  ([oracle-id] (oracle/ready? oracle-id)))
+
+(defn- try-oracle
+  ([thunk mirror-thunk] (try-oracle oid thunk mirror-thunk))
+  ([oracle-id thunk mirror-thunk]
+   (if (oracle-ready? oracle-id)
+     (try
+       (thunk)
+       (catch #?(:clj Exception :cljs :default) _
+         (mirror-thunk)))
+     (mirror-thunk))))
 
 (def daily-query
-  #?(:clj (o 'daily-query [])
-     :cljs "query DailyTraffic($zoneTag: String!, $since: String!, $until: String!) { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequests1dGroups(limit: 31, filter: {date_geq: $since, date_leq: $until}) { sum { requests pageViews bytes } uniq { uniques } dimensions { date } } } } }"))
+  (try-oracle
+   #(o 'daily-query [])
+   (fn [] "query DailyTraffic($zoneTag: String!, $since: String!, $until: String!) { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequests1dGroups(limit: 31, filter: {date_geq: $since, date_leq: $until}) { sum { requests pageViews bytes } uniq { uniques } dimensions { date } } } } }")))
 
 (defn path-query
   "GraphQL query text for the per-path/device/country/status breakdown.
@@ -40,15 +54,16 @@
   the caller (path-report-request) only passes a $host variable when a
   host filter was actually requested, so the query text and the variables
   must agree on whether $host exists.
-   JVM: kotoba `path-query`."
+   Kotoba `path-query` when ready."
   [host?]
-  #?(:clj (o 'path-query [(if host? 1 0)])
-     :cljs
+  (try-oracle
+   #(o 'path-query [(if host? 1 0)])
+   (fn []
      (str "query PathTraffic($zoneTag: String!, $since: Time!, $until: Time!"
           (when host? ", $host: String!")
           ") { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequestsAdaptiveGroups(limit: 100, filter: {datetime_geq: $since, datetime_leq: $until"
           (when host? ", clientRequestHTTPHost: $host")
-          "}) { count dimensions { clientRequestPath clientDeviceType clientCountryName edgeResponseStatus } } } } }")))
+          "}) { count dimensions { clientRequestPath clientDeviceType clientCountryName edgeResponseStatus } } } } }"))))
 
 (defn daily-report-request
   [{:keys [zone-tag since until]}]
@@ -71,8 +86,10 @@
    JVM: error gate via kotoba `report-ok?`; totals via host reduce (sum* available)."
   [response]
   (let [has-errors (if (seq (:errors response)) 1 0)
-        ok? #?(:clj (= 1 (o parse-oid 'report-ok? [(long has-errors)]))
-               :cljs (zero? has-errors))]
+        ok? (try-oracle
+             parse-oid
+             #(= 1 (oracle/i64->host (o parse-oid 'report-ok? [(oracle/as-i64 has-errors)])))
+             #(zero? has-errors))]
     (if-not ok?
       {:ok? false :errors (:errors response)}
       (let [rows (groups response "httpRequests1dGroups")
@@ -120,8 +137,10 @@
    JVM: error gate via kotoba `report-ok?`; tally folds stay host maps."
   [response]
   (let [has-errors (if (seq (:errors response)) 1 0)
-        ok? #?(:clj (= 1 (o parse-oid 'report-ok? [(long has-errors)]))
-               :cljs (zero? has-errors))]
+        ok? (try-oracle
+             parse-oid
+             #(= 1 (oracle/i64->host (o parse-oid 'report-ok? [(oracle/as-i64 has-errors)])))
+             #(zero? has-errors))]
     (if-not ok?
       {:ok? false :errors (:errors response)}
       (let [rows (path-report-rows response)

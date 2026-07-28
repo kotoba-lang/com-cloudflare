@@ -18,26 +18,41 @@
   cloud-itonami.mail/jvm-http-fn) -- so every namespace here is testable
   with a stub, never only against a live account.
 
-  W6 product-shell authority (ADR-0011):
-  On the JVM, constants + URL/auth pure helpers DELEGATE to precompiled
-  client_core.kir.edn. HTTP/JSON/getenv stay host."
+  W6 product-shell authority (ADR-0012 + ADR-0014 cljs dual-source):
+  constants + URL/auth pure helpers DELEGATE to precompiled
+  client_core.kir.edn when oracle loadable (JVM or cljs/nbb).
+  HTTP/JSON/getenv stay host."
   (:require [clojure.string :as str]
             #?(:clj [clojure.data.json :as json])
-            #?(:clj [cloudflare.kotoba.oracle :as oracle])))
+            [cloudflare.kotoba.oracle :as oracle]))
 
 (def ^:private oid :client)
 
-#?(:clj
-   (defn- o [export args]
-     (oracle/call oid export args)))
+(defn- o [export args]
+  (oracle/call oid export args))
+
+(defn- oracle-ready? []
+  (oracle/ready? oid))
+
+(defn- try-oracle
+  "Run oracle body; on failure use mirror."
+  [thunk mirror-thunk]
+  (if (oracle-ready?)
+    (try
+      (thunk)
+      (catch #?(:clj Exception :cljs :default) _
+        (mirror-thunk)))
+    (mirror-thunk)))
 
 (def api-base
-  #?(:clj (o 'api-base [])
-     :cljs "https://api.cloudflare.com/client/v4"))
+  (try-oracle
+   #(o 'api-base [])
+   (fn [] "https://api.cloudflare.com/client/v4")))
 
 (def graphql-endpoint
-  #?(:clj (o 'graphql-endpoint [])
-     :cljs (str api-base "/graphql")))
+  (try-oracle
+   #(o 'graphql-endpoint [])
+   #(str api-base "/graphql")))
 
 #?(:clj
 (defn jvm-http-fn
@@ -67,53 +82,61 @@
 ;; secret-transport ADR 0145–0146). Hosts inject :fetch with the same reply
 ;; shape; default path reads only CLOUDFLARE_API_TOKEN by exact name.
 (def api-token-secret-name
-  #?(:clj (o 'api-token-secret-name [])
-     :cljs "cloudflare-api-token"))
+  (try-oracle
+   #(o 'api-token-secret-name [])
+   (fn [] "cloudflare-api-token")))
 
 (def api-token-env-name
-  #?(:clj (o 'api-token-env-name [])
-     :cljs "CLOUDFLARE_API_TOKEN"))
+  (try-oracle
+   #(o 'api-token-env-name [])
+   (fn [] "CLOUDFLARE_API_TOKEN")))
 
 (defn bearer-auth
-  "Authorization header value. JVM: kotoba `bearer-auth`."
+  "Authorization header value. Kotoba `bearer-auth` when ready."
   [token]
-  #?(:clj (o 'bearer-auth [(str token)])
-     :cljs (str "Bearer " token)))
+  (try-oracle
+   #(o 'bearer-auth [(str token)])
+   #(str "Bearer " token)))
 
 (defn rest-url
   "Absolute REST URL for path + query string (no leading `?` in qs).
-   JVM: kotoba `rest-url`."
+   Kotoba `rest-url` when ready."
   [path qs]
-  #?(:clj (o 'rest-url [(str path) (str (or qs ""))])
-     :cljs (if (str/blank? qs)
-             (str api-base path)
-             (str api-base path "?" qs))))
+  (try-oracle
+   #(o 'rest-url [(str path) (str (or qs ""))])
+   #(if (str/blank? qs)
+      (str api-base path)
+      (str api-base path "?" qs))))
 
 (defn query-pair
-  "One `k=v` query fragment. JVM: kotoba `query-pair`."
+  "One `k=v` query fragment. Kotoba `query-pair` when ready."
   [k v]
-  #?(:clj (o 'query-pair [(str k) (str v)])
-     :cljs (str k "=" v)))
+  (try-oracle
+   #(o 'query-pair [(str k) (str v)])
+   #(str k "=" v)))
 
 (defn transport-ok?
-  "True when HTTP status is a 2xx. JVM: kotoba `transport-ok?`."
+  "True when HTTP status is a 2xx. Kotoba `transport-ok?` when ready."
   [status]
-  #?(:clj (= 1 (o 'transport-ok? [(long status)]))
-     :cljs (< status 300)))
+  (try-oracle
+   #(= 1 (oracle/i64->host (o 'transport-ok? [(oracle/as-i64 status)])))
+   #(< status 300)))
 
 (defn prefer-explicit-token?
   "True when a non-blank explicit token should win over fetch.
-   JVM: kotoba `prefer-explicit-token?`."
+   Kotoba `prefer-explicit-token?` when ready."
   [token]
-  #?(:clj (= 1 (o 'prefer-explicit-token? [(str (or token ""))]))
-     :cljs (and (string? token) (not (str/blank? token)))))
+  (try-oracle
+   #(= 1 (oracle/i64->host (o 'prefer-explicit-token? [(str (or token ""))])))
+   #(and (string? token) (not (str/blank? token)))))
 
 (defn secret-name-matches?
   "True when `name` is the api-token secret id.
-   JVM: kotoba `secret-name-matches?`."
+   Kotoba `secret-name-matches?` when ready."
   [name]
-  #?(:clj (= 1 (o 'secret-name-matches? [(str name)]))
-     :cljs (= name api-token-secret-name)))
+  (try-oracle
+   #(= 1 (oracle/i64->host (o 'secret-name-matches? [(str name)])))
+   #(= name api-token-secret-name)))
 
 #?(:clj
 (defn env-token-fetch

@@ -1,0 +1,7 @@
+;; nbb config for cljs dual-source smoke of product-shell pure helpers.
+;; W6 cljs oracle load: paths include resources/ for KIR artifacts;
+;; kotoba-kir executes precompiled pure-request documents.
+{:paths ["src" "resources"]
+ :deps {io.github.kotoba-lang/kotoba-kir
+        {:git/url "https://github.com/kotoba-lang/kotoba-kir.git"
+         :git/sha "7ad08c4e3e47c8009198d0e77e86bf8c9981cfb7"}}}
