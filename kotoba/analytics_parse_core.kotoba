@@ -1,0 +1,51 @@
+(ns analytics-parse-core
+  (:export [empty-string-tally empty-i64-tally
+            string-tally-get string-tally-add
+            i64-tally-get i64-tally-add
+            sum2 sum3 sum4
+            report-ok?]))
+
+;; W6 analytics parse oracle — tally/sum core of cloudflare.analytics parse-*.
+;; Host projects response rows (JSON→fields); guest folds tallies + totals.
+;; Full path-report-rows vector assembly and GraphQL transport stay cljc.
+;; Parity: test/cloudflare/analytics_parse_kotoba_parity_test.clj
+
+(defn empty-string-tally [] [:map :string :i64]
+  (typed-map-new [:map :string :i64]))
+
+(defn empty-i64-tally [] [:map :i64 :i64]
+  (typed-map-new [:map :i64 :i64]))
+
+(defn string-tally-get [m [:map :string :i64] k :string] :i64
+  (match-option (typed-map-get [:map :string :i64] m k)
+    [:option :i64]
+    (none 0)
+    (some v v)))
+
+(defn string-tally-add [m [:map :string :i64] k :string n :i64] [:map :string :i64]
+  ;; cljc: (update acc k (fnil + 0) count)
+  (typed-map-assoc [:map :string :i64] m k
+                   (+ (string-tally-get m k) n)))
+
+(defn i64-tally-get [m [:map :i64 :i64] k :i64] :i64
+  (match-option (typed-map-get [:map :i64 :i64] m k)
+    [:option :i64]
+    (none 0)
+    (some v v)))
+
+(defn i64-tally-add [m [:map :i64 :i64] k :i64 n :i64] [:map :i64 :i64]
+  (typed-map-assoc [:map :i64 :i64] m k
+                   (+ (i64-tally-get m k) n)))
+
+(defn sum2 [a :i64 b :i64] :i64
+  (+ a b))
+
+(defn sum3 [a :i64 b :i64 c :i64] :i64
+  (+ a (+ b c)))
+
+(defn sum4 [a :i64 b :i64 c :i64 d :i64] :i64
+  (+ a (+ b (+ c d))))
+
+(defn report-ok? [has-errors :i64] :i64
+  ;; cljc: (if-let [errors (seq (:errors response))] false …) → host projects 0/1
+  (if (= has-errors 1) 0 1))

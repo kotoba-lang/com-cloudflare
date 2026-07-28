@@ -2,8 +2,8 @@
   (:export [daily-query path-query path-query-declares-host? path-query-filters-host?]))
 
 ;; W6 cloudflare-pure-request-v1 — GraphQL query text core of cloudflare.analytics.
-;; parse-daily-report / path-report-rows stay cljc (map/vector reduce).
-;; *! and iso-date clock helpers stay host.
+;; Tally/sum folds: kotoba/analytics_parse_core.kotoba (ADR 0009).
+;; JSON row projection + *! / iso-date clocks stay host.
 ;; Parity: test/cloudflare/analytics_kotoba_parity_test.clj
 
 (defn daily-query [] :string
