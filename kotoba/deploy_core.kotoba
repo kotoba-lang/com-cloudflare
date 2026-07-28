@@ -1,21 +1,29 @@
 (ns deploy-core
   (:export [max-account-id max-script-name max-script-bytes
+            max-module-name max-modules
             blank? ws? alnum-char? account-char? account-body-ok?
-            script-body-ok? validate-account-id validate-script-name
-            validate-project-name put-content-type
+            script-body-ok? module-char? module-body-ok?
+            validate-account-id validate-script-name
+            validate-project-name validate-module-name
+            put-content-type module-js-content-type metadata-content-type
             workers-script-path pages-project-path pages-deployments-path
             put-method delete-method script-body-ok-size?
+            modules-count-ok? boundary-ok? multipart-content-type
+            multipart-part multipart-close encode-parts encode-parts-close
             wrangler-pages-deploy-cmd directory-ok?]))
 
-;; W6 cloud-deploy oracle — pure validators + path builders from cloudflare.deploy.
-;; Plan maps {:method :path :headers :body} and *! HTTP stay cljc.
+;; W6 cloud-deploy oracle — pure validators + path builders + multipart
+;; encode scalars from cloudflare.deploy (ADR 0003 + 0005).
+;; Plan maps / module map assembly / JSON metadata / *! HTTP stay cljc.
 ;; validate-*: empty string ≡ cljc nil (ok); else bare error tag (no :deploy/ ns).
-;; Charset mirrors re-matches #"[A-Za-z0-9_-]+" / #"[A-Za-z0-9][A-Za-z0-9_-]*".
+;; Charset mirrors re-matches policies in deploy.cljc.
 ;; Parity: test/cloudflare/deploy_kotoba_parity_test.clj
 
 (defn max-account-id [] :i64 64)
 (defn max-script-name [] :i64 64)
 (defn max-script-bytes [] :i64 5242880)
+(defn max-module-name [] :i64 128)
+(defn max-modules [] :i64 16)
 
 (defn ws? [c :string] :i64
   (if (string=? c " ")
@@ -83,8 +91,48 @@
   ;; cljc: same policy as script names
   (validate-script-name project-name))
 
+(defn module-char? [c :string] :i64
+  ;; [A-Za-z0-9_./-]
+  (if (string-contains? "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_./-" c)
+    1 0))
+
+(defn module-body-ok? [s :string] :i64
+  (let [n (string-byte-length s)]
+    (if (= n 0)
+      1
+      (if (= (module-char? (string-substring s 0 1)) 1)
+        (module-body-ok? (string-substring s 1 n))
+        0))))
+
+(defn validate-module-name [module-name :string] :string
+  ;; cljc: blank / too-long / NUL / .. / absolute / charset
+  (if (= (blank? module-name) 1)
+    "empty-module"
+    (if (< (max-module-name) (string-byte-length module-name))
+      "module-too-long"
+      (if (string-contains? module-name "\0")
+        "null-byte"
+        (if (string-contains? module-name "..")
+          "module-escape"
+          (if (string=? (string-substring module-name 0 1) "/")
+            "module-absolute"
+            (let [n (string-byte-length module-name)
+                  first (string-substring module-name 0 1)
+                  rest (string-substring module-name 1 n)]
+              (if (= (alnum-char? first) 1)
+                (if (= (module-body-ok? rest) 1)
+                  ""
+                  "bad-module")
+                "bad-module"))))))))
+
 (defn put-content-type [] :string
   "application/javascript")
+
+(defn module-js-content-type [] :string
+  "application/javascript+module")
+
+(defn metadata-content-type [] :string
+  "application/json")
 
 (defn put-method [] :string "put")
 (defn delete-method [] :string "delete")
@@ -107,6 +155,50 @@
 
 (defn script-body-ok-size? [byte-len :i64] :i64
   (if (< (max-script-bytes) byte-len) 0 1))
+
+(defn modules-count-ok? [n :i64] :i64
+  ;; cljc: non-empty and ≤ max-modules (caller projects count)
+  (if (< n 1)
+    0
+    (if (< (max-modules) n) 0 1)))
+
+(defn boundary-ok? [boundary :string] :i64
+  ;; cljc: not blank, no space, no double-quote
+  (if (= (blank? boundary) 1)
+    0
+    (if (string-contains? boundary " ")
+      0
+      (if (string-contains? boundary "\"") 0 1))))
+
+(defn multipart-content-type [boundary :string] :string
+  (string-concat "multipart/form-data; boundary=" boundary))
+
+(defn multipart-part [boundary :string name :string filename :string
+                      content-type :string body :string] :string
+  ;; empty filename / content-type ≡ cljc absent keys
+  (let [disp (if (string=? filename "")
+               (string-concat "Content-Disposition: form-data; name=\""
+                              (string-concat name "\""))
+               (string-concat "Content-Disposition: form-data; name=\""
+                              (string-concat name
+                                             (string-concat "\"; filename=\""
+                                                            (string-concat filename "\"")))))
+        ct (if (string=? content-type "")
+             ""
+             (string-concat "Content-Type: " (string-concat content-type "\r\n")))
+        head (string-concat "--" (string-concat boundary "\r\n"))
+        mid (string-concat disp (string-concat "\r\n" (string-concat ct "\r\n")))]
+    (string-concat head (string-concat mid (string-concat body "\r\n")))))
+
+(defn multipart-close [boundary :string] :string
+  (string-concat "--" (string-concat boundary "--\r\n")))
+
+(defn encode-parts [part-a :string part-b :string] :string
+  ;; ABI arity ≤5: host builds parts via multipart-part, then joins.
+  (string-concat part-a part-b))
+
+(defn encode-parts-close [parts :string boundary :string] :string
+  (string-concat parts (multipart-close boundary)))
 
 (defn directory-ok? [directory :string] :i64
   ;; cljc: not blank and no NUL
