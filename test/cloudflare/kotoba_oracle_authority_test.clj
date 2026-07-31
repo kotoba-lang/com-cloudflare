@@ -121,8 +121,13 @@
                                             :wasm32-kotoba-v1 {}))]
     (is (= (ir/execute live 'api-base [])
            (oracle/call :client 'api-base [])))
-    (is (= (ir/execute live 'rest-url ["/zones" "per_page=50"])
-           (oracle/call :client 'rest-url ["/zones" "per_page=50"])))
+    (let [rec (oracle/record
+               [:record :client/path-qs [[:path :string] [:qs :string]]]
+               {:path "/zones" :qs "per_page=50"})]
+      (is (= (ir/execute live 'rest-url [rec])
+             (oracle/call :client 'rest-url [rec])))
+      (is (= (client/rest-url "/zones" "per_page=50")
+             (oracle/call :client 'rest-url [rec]))))
     (is (= (ir/execute live 'bearer-auth ["t"])
            (oracle/call :client 'bearer-auth ["t"])))))
 
@@ -139,12 +144,20 @@
                                           :wasm32-kotoba-v1 {}))]
     (is (= (ir/execute s 'redact-key ["abcd-efgh"])
            (oracle/call :stream 'redact-key ["abcd-efgh"])))
-    (is (= (ir/execute s 'validate-flags ["rtmps://x" "k"])
-           (oracle/call :stream 'validate-flags ["rtmps://x" "k"])))
+    (let [flags (oracle/record
+                 [:record :stream/flags [[:url :string] [:stream-key :string]]]
+                 {:url "rtmps://x" :stream-key "k"})]
+      (is (= (ir/execute s 'validate-flags [flags])
+             (oracle/call :stream 'validate-flags [flags]))))
     (is (= (ir/execute d 'validate-account-id [""])
            (oracle/call :deploy 'validate-account-id [""])))
-    (is (= (ir/execute d 'workers-script-path ["a" "s"])
-           (oracle/call :deploy 'workers-script-path ["a" "s"])))
+    (let [rec (oracle/record
+               [:record :deploy/account-name [[:account-id :string] [:name :string]]]
+               {:account-id "a" :name "s"})]
+      (is (= (ir/execute d 'workers-script-path [rec])
+             (oracle/call :deploy 'workers-script-path [rec])))
+      (is (= (deploy/workers-script-path "a" "s")
+             (oracle/call :deploy 'workers-script-path [rec]))))
     (is (= (ir/execute a 'path-query [1])
            (oracle/call :analytics 'path-query [1])))
     (is (= (ir/execute pb 'content-type-for-path ["x.html"])

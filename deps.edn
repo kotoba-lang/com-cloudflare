@@ -4,7 +4,7 @@
         ;; KIR (resources/cloudflare/oracle/*.kir.edn). Compiler stays :test-only.
         io.github.kotoba-lang/kotoba-kir
         {:git/url "https://github.com/kotoba-lang/kotoba-kir.git"
-         :git/sha "7ad08c4e3e47c8009198d0e77e86bf8c9981cfb7"}}
+         :git/sha "767f2f2fcb6c2c8f9288b24bef24caedb0486333"}}
  :aliases
  {:test {:extra-paths ["test"]
          ;; kotoba-lang/compiler is TEST-ONLY for the W6 pure-request oracle
@@ -18,7 +18,7 @@
                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}
                       io.github.kotoba-lang/compiler
                       {:git/url "https://github.com/kotoba-lang/compiler.git"
-                       :git/sha "f685d1535e5fdab49b7f226d83a200c1b09f686e"}}
+                       :git/sha "98b56bdb6886236281b634cc3409088ed2fe72a4"}}
          :main-opts ["-m" "cognitect.test-runner"]
          :exec-fn cognitect.test-runner.api/test}
 
@@ -30,7 +30,7 @@
                  :git/sha "34415ce9bf2b8d37d5bc8259ba7e00f5d091eb44"}}
                :extra-deps {io.github.kotoba-lang/compiler
                             {:git/url "https://github.com/kotoba-lang/compiler.git"
-                             :git/sha "f685d1535e5fdab49b7f226d83a200c1b09f686e"}}
+                             :git/sha "98b56bdb6886236281b634cc3409088ed2fe72a4"}}
                :main-opts ["-m" "cloudflare.kotoba-oracle-gen"]}
 
   ;; clj-kondo as a Clojars lib (no Homebrew/system install needed).

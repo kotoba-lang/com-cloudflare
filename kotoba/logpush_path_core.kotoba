@@ -1,4 +1,7 @@
 (ns logpush-path-core
+  (:schemas {;; T5.2 native guest record
+             :logpush/zone-job [:record :logpush/zone-job
+                                [[:zone-id :string] [:job-id :string]]]})
   (:export [datasets-path jobs-path job-path]))
 
 ;; W6 cloudflare-pure-request-v1 — pure REST path construction for Logpush.
@@ -11,5 +14,7 @@
 (defn jobs-path [zone-id :string] :string
   (string-concat "/zones/" (string-concat zone-id "/logpush/jobs")))
 
-(defn job-path [zone-id :string job-id :string] :string
-  (string-concat (jobs-path zone-id) (string-concat "/" job-id)))
+(defn job-path [x [:ref :logpush/zone-job]] :string
+  ;; T5.2: zone-id+job-id on one guest record
+  (string-concat (jobs-path (record-get x :zone-id))
+                 (string-concat "/" (record-get x :job-id))))

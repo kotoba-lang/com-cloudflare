@@ -53,7 +53,11 @@
 (defn job-path
   "REST path for one Logpush job. JVM: kotoba `job-path`."
   [zone-id job-id]
-  (o-record 'job-path {:zone-id zone-id :job-id job-id} [[:zone-id :string] [:job-id :string]]))
+  (o-record 'job-path
+            {:in (oracle/record
+                  [:record :logpush/zone-job [[:zone-id :string] [:job-id :string]]]
+                  {:zone-id zone-id :job-id job-id})}
+            [[:in :raw]]))
 
 #?(:clj
 (defn datasets

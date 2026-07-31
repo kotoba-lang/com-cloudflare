@@ -67,9 +67,11 @@
   ([platform] (destination-url platform :rtmps))
   ([platform variant]
    (let [u (o-record 'destination-url
-                     {:platform (name (keyword platform))
-                      :variant (name (keyword variant))}
-                     [[:platform :string] [:variant :string]])]
+                     {:in (oracle/record
+                           [:record :stream/dest [[:platform :string] [:variant :string]]]
+                           {:platform (name (keyword platform))
+                            :variant (name (keyword variant))})}
+                     [[:in :raw]])]
      (when-not (str/blank? u) u))))
 
 (defn redact-key
@@ -108,8 +110,10 @@
   [{:keys [url stream-key]}]
   (let [flags (oracle/i64->host
                   (o-record 'validate-flags
-                        {:url url :stream-key stream-key}
-                        [[:url :string] [:stream-key :string]]))]
+                        {:in (oracle/record
+                              [:record :stream/flags [[:url :string] [:stream-key :string]]]
+                              {:url (or url "") :stream-key (or stream-key "")})}
+                        [[:in :raw]]))]
        (into []
              (keep (fn [[bit kw]]
                      (when (pos? (bit-and flags bit)) kw)))
@@ -135,12 +139,20 @@
 (defn live-input-path
   "REST path for one live input. JVM: kotoba `live-input-path`."
   [account-id input-uid]
-  (o-record 'live-input-path {:account-id account-id :input-uid input-uid} [[:account-id :string] [:input-uid :string]]))
+  (o-record 'live-input-path
+            {:in (oracle/record
+                  [:record :stream/account-uid [[:account-id :string] [:input-uid :string]]]
+                  {:account-id account-id :input-uid input-uid})}
+            [[:in :raw]]))
 
 (defn outputs-path
   "REST path for live outputs under an input. JVM: kotoba `outputs-path`."
   [account-id input-uid]
-  (o-record 'outputs-path {:account-id account-id :input-uid input-uid} [[:account-id :string] [:input-uid :string]]))
+  (o-record 'outputs-path
+            {:in (oracle/record
+                  [:record :stream/account-uid [[:account-id :string] [:input-uid :string]]]
+                  {:account-id account-id :input-uid input-uid})}
+            [[:in :raw]]))
 
 (defn create-live-input-request
   "POST a new live input.
@@ -248,16 +260,17 @@
   [{:keys [uid name whip-url rtmps-url rtmps-stream-key]}]
   ;; Guest defaults: missing whip/rtmps render as "-" (parity with stream_core).
   (o-record 'live-input-summary
-            {:uid (or uid "")
-             :name (or name "")
-             :whip-url (or whip-url "-")
-             :rtmps-url (or rtmps-url "-")
-             :rtmps-stream-key (or rtmps-stream-key "")}
-            [[:uid :string]
-             [:name :string]
-             [:whip-url :string]
-             [:rtmps-url :string]
-             [:rtmps-stream-key :string]]))
+            {:in (oracle/record
+                  [:record :stream/summary
+                   [[:uid :string] [:name :string]
+                    [:whip-disp :string] [:rtmps-disp :string]
+                    [:rtmps-stream-key :string]]]
+                  {:uid (or uid "")
+                   :name (or name "")
+                   :whip-disp (or whip-url "-")
+                   :rtmps-disp (or rtmps-url "-")
+                   :rtmps-stream-key (or rtmps-stream-key "")})}
+            [[:in :raw]]))
 
 ;; ---------------------------------------------------------------------------
 ;; :clj convenience layer

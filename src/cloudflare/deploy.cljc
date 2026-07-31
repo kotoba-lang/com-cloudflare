@@ -87,39 +87,60 @@
   [project-name]
   (validate-script-name project-name))
 
+(def ^:private account-name-schema
+  "Guest :deploy/account-name — T5.2 native record for path builders."
+  [:record :deploy/account-name [[:account-id :string] [:name :string]]])
+
+(def ^:private pages-account-project-schema
+  "Guest :pages/account-project — T5.2 native record for upload-token path."
+  [:record :pages/account-project [[:account-id :string] [:project-name :string]]])
+
+(defn- account-name-in [account-id name]
+  (oracle/record account-name-schema {:account-id account-id :name name}))
+
 (defn workers-script-path
   "REST path for a Worker script resource.
-   JVM: path via kotoba after host validation."
+   JVM: path via kotoba after host validation. T5.2 native guest record."
   [account-id script-name]
   (when-let [err (or (validate-account-id account-id)
                      (validate-script-name script-name))]
     (throw (ex-info "cloudflare.deploy path validation failed"
                     {:phase :cloudflare-deploy :error err})))
-  (o-record 'workers-script-path {:account-id account-id :script-name script-name} [[:account-id :string] [:script-name :string]]))
+  (o-record 'workers-script-path
+            {:in (account-name-in account-id script-name)}
+            [[:in :raw]]))
 
 (defn pages-project-path
   "REST path for a Pages project resource.
-   JVM: path via kotoba after host validation."
+   JVM: path via kotoba after host validation. T5.2 native guest record."
   [account-id project-name]
   (when-let [err (or (validate-account-id account-id)
                      (validate-project-name project-name))]
     (throw (ex-info "cloudflare.deploy path validation failed"
                     {:phase :cloudflare-deploy :error err})))
-  (o-record 'pages-project-path {:account-id account-id :project-name project-name} [[:account-id :string] [:project-name :string]]))
+  (o-record 'pages-project-path
+            {:in (account-name-in account-id project-name)}
+            [[:in :raw]]))
 
 (defn pages-deployments-path
   "REST path for listing/creating Pages deployments (metadata API).
-   JVM: kotoba `pages-deployments-path`."
+   JVM: kotoba `pages-deployments-path`. T5.2 native guest record."
   [account-id project-name]
   (do (pages-project-path account-id project-name)
-     (o-record 'pages-deployments-path {:account-id account-id :project-name project-name} [[:account-id :string] [:project-name :string]])))
+      (o-record 'pages-deployments-path
+                {:in (account-name-in account-id project-name)}
+                [[:in :raw]])))
 
 (defn pages-upload-token-path
   "REST path for Pages Direct Upload JWT (GET).
-   JVM: kotoba pages-bulk `pages-upload-token-path`."
+   JVM: kotoba pages-bulk `pages-upload-token-path`. T5.2 native guest record."
   [account-id project-name]
   (do (pages-project-path account-id project-name)
-     (o-record bulk-oid 'pages-upload-token-path {:account-id account-id :project-name project-name} [[:account-id :string] [:project-name :string]])))
+      (o-record bulk-oid 'pages-upload-token-path
+                {:in (oracle/record pages-account-project-schema
+                                    {:account-id account-id
+                                     :project-name project-name})}
+                [[:in :raw]])))
 
 (defn validate-asset-path
   "Pure relative asset path policy for Pages bulk (no .. / absolute / NUL).
@@ -352,21 +373,33 @@
     compatibility-date (assoc :compatibility_date (str compatibility-date))
     (seq bindings) (assoc :bindings (vec bindings))))
 
+(def ^:private multipart-part-schema
+  [:record :deploy/multipart-part
+   [[:boundary :string] [:name :string] [:filename :string]
+    [:content-type :string] [:body :string]]])
+
+(def ^:private parts-close-schema
+  [:record :deploy/parts-close [[:parts :string] [:boundary :string]]])
+
+(def ^:private parts-schema
+  [:record :deploy/parts [[:part-a :string] [:part-b :string]]])
+
+(def ^:private wrangler-schema
+  [:record :deploy/wrangler
+   [[:project :string] [:directory :string] [:wrangler-bin :string]]])
+
 (defn- multipart-part
   "Encode one multipart form part (CRLF). Pure string.
-   Kotoba `multipart-part` (T6.4 requires oracle)."
+   Kotoba `multipart-part` (T6.4 requires oracle). T5.2 native guest record."
   [boundary {:keys [name filename content-type body]}]
   (o-record 'multipart-part
-            {:boundary boundary
-             :name name
-             :filename filename
-             :content-type content-type
-             :body body}
-            [[:boundary :string]
-             [:name :string]
-             [:filename :string]
-             [:content-type :string]
-             [:body :string]]))
+            {:in (oracle/record multipart-part-schema
+                                {:boundary boundary
+                                 :name name
+                                 :filename (or filename "")
+                                 :content-type (or content-type "")
+                                 :body (or body "")})}
+            [[:in :raw]]))
 
 (defn encode-multipart
   "Pure multipart/form-data body for the given parts + boundary.
@@ -379,8 +412,9 @@
                     {:phase :cloudflare-deploy})))
   (let [joined (apply str (map #(multipart-part boundary %) parts))]
     (o-record 'encode-parts-close
-              {:joined joined :boundary boundary}
-              [[:joined :string] [:boundary :string]])))
+              {:in (oracle/record parts-close-schema
+                                  {:parts joined :boundary boundary})}
+              [[:in :raw]])))
 
 
 (defn workers-module-put-plan

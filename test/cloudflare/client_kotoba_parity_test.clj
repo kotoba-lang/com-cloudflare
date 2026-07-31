@@ -10,6 +10,17 @@
 
 (def port-source (slurp "kotoba/client_core.kotoba"))
 
+(def ^:private kv-lit
+  "[:record :client/kv [[:k :string] [:v :string]]]")
+(def ^:private path-qs-lit
+  "[:record :client/path-qs [[:path :string] [:qs :string]]]")
+
+(defn- kv-call [export k v]
+  (str "(" export " (record-new " kv-lit " " k " " v "))"))
+
+(defn- path-qs-call [export path qs]
+  (str "(" export " (record-new " path-qs-lit " " path " " qs "))"))
+
 (def export-prefix
   (str "api-base graphql-endpoint api-token-secret-name api-token-env-name "
        "default-content-type method-get method-post method-put method-delete "
@@ -69,11 +80,10 @@
   (let [path "/zones/z1/dns_records"
         qs (str "name=" "app.example.com")
         actual (compile-string-cases
-                {"noq" (str "(rest-url " (kotoba-literal path) " \"\")")
-                 "with" (str "(rest-url " (kotoba-literal path) " "
-                             (kotoba-literal qs) ")")
-                 "qpair" (str "(query-pair " (kotoba-literal "name") " "
-                              (kotoba-literal "app.example.com") ")")
+                {"noq" (path-qs-call "rest-url" (kotoba-literal path) "\"\"")
+                 "with" (path-qs-call "rest-url" (kotoba-literal path) (kotoba-literal qs))
+                 "qpair" (kv-call "query-pair" (kotoba-literal "name")
+                                  (kotoba-literal "app.example.com"))
                  "auth" (str "(bearer-auth " (kotoba-literal "test-token") ")")})]
     (is (= (str client/api-base path) (get actual "noq")))
     (is (= (str client/api-base path "?" qs) (get actual "with")))

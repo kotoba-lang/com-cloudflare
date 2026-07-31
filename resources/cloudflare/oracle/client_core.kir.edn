@@ -84,27 +84,46 @@
       0))),
    :param-types [:string]}
   {:name query-pair,
-   :params [k v],
-   :result :string,
-   :effects #{},
-   :body (string-concat k (string-concat "=" v)),
-   :param-types [:string :string]}
-  {:name with-query,
-   :params [path qs],
+   :params [x],
    :result :string,
    :effects #{},
    :body
-   (if
-    (string=? qs "")
-    path
-    (string-concat path (string-concat "?" qs))),
-   :param-types [:string :string]}
-  {:name rest-url,
-   :params [path qs],
+   (string-concat
+    (record-get [:record :client/kv [[:k :string] [:v :string]]] x :k)
+    (string-concat
+     "="
+     (record-get
+      [:record :client/kv [[:k :string] [:v :string]]]
+      x
+      :v))),
+   :param-types [[:ref :client/kv]]}
+  {:name with-query,
+   :params [x],
    :result :string,
    :effects #{},
-   :body (string-concat (api-base) (with-query path qs)),
-   :param-types [:string :string]}
+   :body
+   (let
+    [path
+     (record-get
+      [:record :client/path-qs [[:path :string] [:qs :string]]]
+      x
+      :path)
+     qs
+     (record-get
+      [:record :client/path-qs [[:path :string] [:qs :string]]]
+      x
+      :qs)]
+    (if
+     (string=? qs "")
+     path
+     (string-concat path (string-concat "?" qs)))),
+   :param-types [[:ref :client/path-qs]]}
+  {:name rest-url,
+   :params [x],
+   :result :string,
+   :effects #{},
+   :body (string-concat (api-base) (with-query x)),
+   :param-types [[:ref :client/path-qs]]}
   {:name graphql-url,
    :params [],
    :result :string,
@@ -136,7 +155,11 @@
    :body (if (= (blank? token) 1) 0 1),
    :param-types [:string]}],
  :oracle-value nil,
- :schema-identities nil,
+ :schema-identities
+ #:client{:kv
+          "0660a1f49423aa40bef8f943f936aa912772fabf674c6f17513d5b04be9d5b6e",
+          :path-qs
+          "f2f15e0b2edea4762b06faafca3a19c69e115ff9d3eb51293646237f5fb7c7f7"},
  :exports
  [api-base
   graphql-endpoint
@@ -157,7 +180,10 @@
   secret-name-matches?
   transport-ok?
   prefer-explicit-token?],
- :schemas nil,
+ :schemas
+ #:client{:kv [:record :client/kv [[:k :string] [:v :string]]],
+          :path-qs
+          [:record :client/path-qs [[:path :string] [:qs :string]]]},
  :effects #{},
  :blocks [],
  :entry nil}

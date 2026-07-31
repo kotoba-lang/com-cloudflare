@@ -27,12 +27,22 @@
           via-host (client/bearer-auth "tok")]
       (is (= via-call via-rec))
       (is (= via-call via-host)))
-    (let [via-call (oracle/call :client 'rest-url ["/zones" "page=1"])
-          via-host (client/rest-url "/zones" "page=1")]
-      (is (= via-call via-host)))
-    (let [via-call (oracle/call :client 'query-pair ["a" "b"])
-          via-host (client/query-pair "a" "b")]
-      (is (= via-call via-host)))))
+    (let [via-host (client/rest-url "/zones" "page=1")
+          via-rec (oracle/call-record
+                   :client 'rest-url
+                   {:in (oracle/record
+                         [:record :client/path-qs [[:path :string] [:qs :string]]]
+                         {:path "/zones" :qs "page=1"})}
+                   [[:in :raw]])]
+      (is (= via-host via-rec)))
+    (let [via-host (client/query-pair "a" "b")
+          via-rec (oracle/call-record
+                   :client 'query-pair
+                   {:in (oracle/record
+                         [:record :client/kv [[:k :string] [:v :string]]]
+                         {:k "a" :v "b"})}
+                   [[:in :raw]])]
+      (is (= via-host via-rec)))))
 
 (deftest call-record-paths-and-stream-deploy
   (when (oracle/ready? :workers-path)
