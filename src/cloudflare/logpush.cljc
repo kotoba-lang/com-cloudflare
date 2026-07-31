@@ -31,6 +31,11 @@
 (defn- o [export args]
   (oracle/call oid export args))
 
+(defn- o-record
+  "T5.2: structural host map → call-record."
+  [export host-map field-specs]
+  (oracle/call-record oid export host-map field-specs))
+
 (defn- oracle-ready? []
   (oracle/ready? oid))
 
@@ -47,21 +52,21 @@
   "REST path for Logpush datasets. JVM: kotoba `datasets-path`."
   [zone-id]
   (try-oracle
-   #(o 'datasets-path [(str zone-id)])
+   #(o-record 'datasets-path {:zone-id zone-id} [[:zone-id :string]])
    #(str "/zones/" zone-id "/logpush/datasets")))
 
 (defn jobs-path
   "REST path for Logpush jobs collection. JVM: kotoba `jobs-path`."
   [zone-id]
   (try-oracle
-   #(o 'jobs-path [(str zone-id)])
+   #(o-record 'jobs-path {:zone-id zone-id} [[:zone-id :string]])
    #(str "/zones/" zone-id "/logpush/jobs")))
 
 (defn job-path
   "REST path for one Logpush job. JVM: kotoba `job-path`."
   [zone-id job-id]
   (try-oracle
-   #(o 'job-path [(str zone-id) (str job-id)])
+   #(o-record 'job-path {:zone-id zone-id :job-id job-id} [[:zone-id :string] [:job-id :string]])
    #(str "/zones/" zone-id "/logpush/jobs/" job-id)))
 
 #?(:clj

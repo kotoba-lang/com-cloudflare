@@ -129,11 +129,94 @@
 
   `oracle-id`  — keyword in catalog (e.g. :client)
   `export`     — symbol matching a kotoba (:export …) name
-  `args`       — vector of host values (strings / i64 longs) matching guest ABI"
+  `args`       — vector of host values (strings / i64 longs) matching guest ABI.
+
+  Prefer `call-record` when the host boundary is a map (T5.1 structural args)."
   [oracle-id export args]
   (let [kir (load-kir oracle-id)
         fn-name (if (symbol? export) export (symbol (name export)))]
     (ir/execute kir fn-name (vec args))))
+
+(defn option-of
+  "Host nil → option none; non-nil → option some (Product Value ABI v1)."
+  [type value]
+  (if (nil? value)
+    [type false]
+    [type true value]))
+
+(defn option-string
+  "Optional string: nil → none; otherwise some (including empty string)."
+  [s]
+  (option-of [:option :string] (when (some? s) (str s))))
+
+(defn option-i64
+  "Optional i64: nil → none; otherwise some long/BigInt."
+  [n]
+  (if (nil? n)
+    [[:option :i64] false]
+    [[:option :i64] true (as-i64 n)]))
+
+(defn bool->host
+  "KIR :bool result → host boolean.
+
+  Guest words are 0/1 (or true/false). Never use Clojure `boolean` on a guest
+  word: `(boolean 0)` is true because only nil/false are falsey in Clojure."
+  [v]
+  (cond
+    (true? v) true
+    (false? v) false
+    (number? v) (not (zero? #?(:clj (long v) :cljs v)))
+    :else (boolean v)))
+
+(defn project-field
+  "Project one host map field into a guest ABI payload (T5.2).
+
+  kind:
+    :string         — str of v (nil becomes empty string)
+    :i64            — as-i64 (required number)
+    :bool           — host boolean
+    :option-string  — Product Value ABI option string
+    :option-i64     — Product Value ABI option i64
+    :raw            — pass through unchanged
+    nil / omitted   — treated as :raw"
+  [kind v]
+  (case kind
+    :string (str (or v ""))
+    :i64 (as-i64 v)
+    :bool (boolean v)
+    :option-string (option-string v)
+    :option-i64 (option-i64 v)
+    :raw v
+    (if (nil? kind) v v)))
+
+(defn map->args
+  "Structural host map to ordered guest arg vector (T5.2 positional projection).
+
+  field-specs is a vector of keys or [key kind] pairs.
+  Kinds: :string :i64 :bool :option-string :option-i64 :raw."
+  [m field-specs]
+  (when-not (map? m)
+    (throw (ex-info "map->args requires a host map"
+                    {:phase :oracle-call-record :got (type m)})))
+  (when-not (sequential? field-specs)
+    (throw (ex-info "map->args requires field-specs sequential"
+                    {:phase :oracle-call-record})))
+  (mapv (fn [spec]
+          (if (vector? spec)
+            (let [[k kind] spec]
+              (project-field kind (get m k)))
+            (get m spec)))
+        field-specs))
+
+(defn call-record
+  "Call an oracle export with a structural host map (T5.2).
+
+  Projects `host-map` through `field-specs` (see `map->args`) into the
+  positional guest ABI, then `call`. Product hosts should prefer this over
+  hand-built arity vectors when the natural host shape is a map/record
+  (T5.1 structural-args policy; murakumo T5.2 pattern port)."
+  [oracle-id export host-map field-specs]
+  (call oracle-id export (map->args host-map field-specs)))
 
 (defn catalog-ids
   "Known oracle ids shipped as product-shell artifacts."

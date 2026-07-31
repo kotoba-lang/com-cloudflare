@@ -11,6 +11,11 @@
 (defn- o [export args]
   (oracle/call oid export args))
 
+(defn- o-record
+  "T5.2: structural host map → call-record."
+  [export host-map field-specs]
+  (oracle/call-record oid export host-map field-specs))
+
 (defn- oracle-ready? []
   (oracle/ready? oid))
 
@@ -42,7 +47,7 @@
   "REST path for DNS records under a zone. JVM: kotoba `dns-records-path`."
   [zone-id]
   (try-oracle
-   #(o 'dns-records-path [(str zone-id)])
+   #(o-record 'dns-records-path {:zone-id zone-id} [[:zone-id :string]])
    #(str "/zones/" zone-id "/dns_records")))
 
 (defn hostname-matches?
@@ -50,7 +55,7 @@
    JVM: kotoba `hostname-matches?`."
   [expected actual]
   (try-oracle
-   #(= 1 (oracle/i64->host (o 'hostname-matches? [(str expected) (str actual)])))
+   #(= 1 (oracle/i64->host (o-record 'hostname-matches? {:expected expected :actual actual} [[:expected :string] [:actual :string]])))
    #(= expected actual)))
 
 #?(:clj

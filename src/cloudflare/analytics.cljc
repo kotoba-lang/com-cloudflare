@@ -29,6 +29,13 @@
   ([export args] (oracle/call oid export args))
   ([oracle-id export args] (oracle/call oracle-id export args)))
 
+(defn- o-record
+  "T5.2: structural host map → call-record."
+  ([export host-map field-specs]
+   (oracle/call-record oid export host-map field-specs))
+  ([oracle-id export host-map field-specs]
+   (oracle/call-record oracle-id export host-map field-specs)))
+
 (defn- oracle-ready?
   ([] (oracle/ready? oid))
   ([oracle-id] (oracle/ready? oracle-id)))
@@ -57,7 +64,7 @@
    Kotoba `path-query` when ready."
   [host?]
   (try-oracle
-   #(o 'path-query [(if host? 1 0)])
+   #(o-record 'path-query {:host? (if host? 1 0)} [[:host? :i64]])
    (fn []
      (str "query PathTraffic($zoneTag: String!, $since: Time!, $until: Time!"
           (when host? ", $host: String!")
@@ -88,7 +95,7 @@
   (let [has-errors (if (seq (:errors response)) 1 0)
         ok? (try-oracle
              parse-oid
-             #(= 1 (oracle/i64->host (o parse-oid 'report-ok? [(oracle/as-i64 has-errors)])))
+             #(= 1 (oracle/i64->host (o-record parse-oid 'report-ok? {:has-errors has-errors} [[:has-errors :i64]])))
              #(zero? has-errors))]
     (if-not ok?
       {:ok? false :errors (:errors response)}
@@ -139,7 +146,7 @@
   (let [has-errors (if (seq (:errors response)) 1 0)
         ok? (try-oracle
              parse-oid
-             #(= 1 (oracle/i64->host (o parse-oid 'report-ok? [(oracle/as-i64 has-errors)])))
+             #(= 1 (oracle/i64->host (o-record parse-oid 'report-ok? {:has-errors has-errors} [[:has-errors :i64]])))
              #(zero? has-errors))]
     (if-not ok?
       {:ok? false :errors (:errors response)}
