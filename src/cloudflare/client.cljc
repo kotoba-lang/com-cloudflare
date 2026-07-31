@@ -85,16 +85,29 @@
   [token]
   (o-record 'bearer-auth {:token token} [[:token :string]]))
 
+(def ^:private kv-schema
+  "Guest :client/kv — T5.2 native record for query-pair."
+  [:record :client/kv [[:k :string] [:v :string]]])
+
+(def ^:private path-qs-schema
+  "Guest :client/path-qs — T5.2 native record for with-query/rest-url."
+  [:record :client/path-qs [[:path :string] [:qs :string]]])
+
 (defn rest-url
   "Absolute REST URL for path + query string (no leading `?` in qs).
-   Kotoba `rest-url` (T6.4 requires oracle)."
+   Kotoba `rest-url` (T6.4 requires oracle). T5.2 native guest record."
   [path qs]
-  (o-record 'rest-url {:path path :qs qs} [[:path :string] [:qs :string]]))
+  (o-record 'rest-url
+            {:in (oracle/record path-qs-schema {:path path :qs (or qs "")})}
+            [[:in :raw]]))
 
 (defn query-pair
-  "One `k=v` query fragment. Kotoba `query-pair` (T6.4 requires oracle)."
+  "One `k=v` query fragment. Kotoba `query-pair` (T6.4 requires oracle).
+   T5.2 native guest record."
   [k v]
-  (o-record 'query-pair {:k k :v v} [[:k :string] [:v :string]]))
+  (o-record 'query-pair
+            {:in (oracle/record kv-schema {:k k :v v})}
+            [[:in :raw]]))
 
 (defn transport-ok?
   "True when HTTP status is a 2xx. Kotoba `transport-ok?` (T6.4 requires oracle)."

@@ -1,4 +1,18 @@
 (ns deploy-core
+  (:schemas {;; T5.2 native guest record: multi-arg pure → single record
+             :deploy/account-name [:record :deploy/account-name
+                                   [[:account-id :string] [:name :string]]]
+             :deploy/parts [:record :deploy/parts
+                            [[:part-a :string] [:part-b :string]]]
+             :deploy/parts-close [:record :deploy/parts-close
+                                  [[:parts :string] [:boundary :string]]]
+             :deploy/multipart-part [:record :deploy/multipart-part
+                                     [[:boundary :string] [:name :string]
+                                      [:filename :string] [:content-type :string]
+                                      [:body :string]]]
+             :deploy/wrangler [:record :deploy/wrangler
+                               [[:project :string] [:directory :string]
+                                [:wrangler-bin :string]]]})
   (:export [max-account-id max-script-name max-script-bytes
             max-module-name max-modules
             blank? ws? alnum-char? account-char? account-body-ok?
@@ -137,21 +151,23 @@
 (defn put-method [] :string "put")
 (defn delete-method [] :string "delete")
 
-(defn workers-script-path [account-id :string script-name :string] :string
+(defn workers-script-path [x [:ref :deploy/account-name]] :string
   ;; unvalidated assembly (cljc throws before concat on bad names)
+  ;; T5.2: account-id+script-name on one guest record (:name = script-name)
   (string-concat
    "/accounts/"
-   (string-concat account-id
-                  (string-concat "/workers/scripts/" script-name))))
+   (string-concat (record-get x :account-id)
+                  (string-concat "/workers/scripts/" (record-get x :name)))))
 
-(defn pages-project-path [account-id :string project-name :string] :string
+(defn pages-project-path [x [:ref :deploy/account-name]] :string
+  ;; T5.2: account-id+project-name on one guest record (:name = project-name)
   (string-concat
    "/accounts/"
-   (string-concat account-id
-                  (string-concat "/pages/projects/" project-name))))
+   (string-concat (record-get x :account-id)
+                  (string-concat "/pages/projects/" (record-get x :name)))))
 
-(defn pages-deployments-path [account-id :string project-name :string] :string
-  (string-concat (pages-project-path account-id project-name) "/deployments"))
+(defn pages-deployments-path [x [:ref :deploy/account-name]] :string
+  (string-concat (pages-project-path x) "/deployments"))
 
 (defn script-body-ok-size? [byte-len :i64] :i64
   (if (< (max-script-bytes) byte-len) 0 1))
@@ -173,10 +189,15 @@
 (defn multipart-content-type [boundary :string] :string
   (string-concat "multipart/form-data; boundary=" boundary))
 
-(defn multipart-part [boundary :string name :string filename :string
-                      content-type :string body :string] :string
+(defn multipart-part [x [:ref :deploy/multipart-part]] :string
   ;; empty filename / content-type ≡ cljc absent keys
-  (let [disp (if (string=? filename "")
+  ;; T5.2: boundary+name+filename+content-type+body on one guest record
+  (let [boundary (record-get x :boundary)
+        name (record-get x :name)
+        filename (record-get x :filename)
+        content-type (record-get x :content-type)
+        body (record-get x :body)
+        disp (if (string=? filename "")
                (string-concat "Content-Disposition: form-data; name=\""
                               (string-concat name "\""))
                (string-concat "Content-Disposition: form-data; name=\""
@@ -193,12 +214,12 @@
 (defn multipart-close [boundary :string] :string
   (string-concat "--" (string-concat boundary "--\r\n")))
 
-(defn encode-parts [part-a :string part-b :string] :string
-  ;; ABI arity ≤5: host builds parts via multipart-part, then joins.
-  (string-concat part-a part-b))
+(defn encode-parts [x [:ref :deploy/parts]] :string
+  ;; host builds parts via multipart-part, then joins.
+  (string-concat (record-get x :part-a) (record-get x :part-b)))
 
-(defn encode-parts-close [parts :string boundary :string] :string
-  (string-concat parts (multipart-close boundary)))
+(defn encode-parts-close [x [:ref :deploy/parts-close]] :string
+  (string-concat (record-get x :parts) (multipart-close (record-get x :boundary))))
 
 (defn directory-ok? [directory :string] :i64
   ;; cljc: not blank and no NUL
@@ -206,9 +227,12 @@
     0
     (if (string-contains? directory "\0") 0 1)))
 
-(defn wrangler-pages-deploy-cmd [project :string directory :string wrangler-bin :string] :string
+(defn wrangler-pages-deploy-cmd [x [:ref :deploy/wrangler]] :string
   ;; space-joined argv (cljc returns vector). empty bin ⇒ "wrangler".
-  (let [bin (if (string=? wrangler-bin "") "wrangler" wrangler-bin)]
+  (let [project (record-get x :project)
+        directory (record-get x :directory)
+        wrangler-bin (record-get x :wrangler-bin)
+        bin (if (string=? wrangler-bin "") "wrangler" wrangler-bin)]
     (string-concat
      bin
      (string-concat

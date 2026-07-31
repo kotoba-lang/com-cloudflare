@@ -36,11 +36,21 @@
   [zone-id]
   (o-record 'dns-records-path {:zone-id zone-id} [[:zone-id :string]]))
 
+(def ^:private match-schema
+  [:record :zones/match [[:expected :string] [:actual :string]]])
+
+(def ^:private zone-name-schema
+  [:record :zones/zone-name [[:zone-id :string] [:name :string]]])
+
 (defn hostname-matches?
   "Exact hostname/name equality used by zone-by-name and domain filters.
-   JVM: kotoba `hostname-matches?`."
+   JVM: kotoba `hostname-matches?`. T5.2 native guest record."
   [expected actual]
-  (= 1 (oracle/i64->host (o-record 'hostname-matches? {:expected expected :actual actual} [[:expected :string] [:actual :string]]))))
+  (= 1 (oracle/i64->host
+        (o-record 'hostname-matches?
+                  {:in (oracle/record match-schema
+                                      {:expected expected :actual actual})}
+                  [[:in :raw]]))))
 
 #?(:clj
 (defn list-zones

@@ -87,12 +87,22 @@
        (string-concat "…<" (string-concat (i64-str n) " chars>")))))),
    :param-types [:string]}
   {:name validate-flags,
-   :params [url stream-key],
+   :params [x],
    :result :i64,
    :effects #{},
    :body
    (let
-    [url-blank
+    [url
+     (record-get
+      [:record :stream/flags [[:url :string] [:stream-key :string]]]
+      x
+      :url)
+     stream-key
+     (record-get
+      [:record :stream/flags [[:url :string] [:stream-key :string]]]
+      x
+      :stream-key)
+     url-blank
      (blank? url)
      key-blank
      (blank? stream-key)
@@ -110,32 +120,43 @@
       0
       (if (string-contains? url stream-key) 16 0))]
     (+ f0 (+ f1 (+ f2 (+ f3 f4))))),
-   :param-types [:string :string]}
+   :param-types [[:ref :stream/flags]]}
   {:name destination-url,
-   :params [platform variant],
+   :params [x],
    :result :string,
    :effects #{},
    :body
-   (if
-    (string=? platform "youtube")
+   (let
+    [platform
+     (record-get
+      [:record :stream/dest [[:platform :string] [:variant :string]]]
+      x
+      :platform)
+     variant
+     (record-get
+      [:record :stream/dest [[:platform :string] [:variant :string]]]
+      x
+      :variant)]
     (if
-     (string=? variant "rtmps")
-     "rtmps://a.rtmps.youtube.com/live2"
-     (if
-      (string=? variant "rtmp")
-      "rtmp://a.rtmp.youtube.com/live2"
-      (if
-       (string=? variant "rtmp-backup")
-       "rtmp://b.rtmp.youtube.com/live2?backup=1"
-       "")))
-    (if
-     (string=? platform "twitch")
+     (string=? platform "youtube")
      (if
       (string=? variant "rtmps")
-      "rtmps://live.twitch.tv/app"
-      (if (string=? variant "rtmp") "rtmp://live.twitch.tv/app" ""))
-     "")),
-   :param-types [:string :string]}
+      "rtmps://a.rtmps.youtube.com/live2"
+      (if
+       (string=? variant "rtmp")
+       "rtmp://a.rtmp.youtube.com/live2"
+       (if
+        (string=? variant "rtmp-backup")
+        "rtmp://b.rtmp.youtube.com/live2?backup=1"
+        "")))
+     (if
+      (string=? platform "twitch")
+      (if
+       (string=? variant "rtmps")
+       "rtmps://live.twitch.tv/app"
+       (if (string=? variant "rtmp") "rtmp://live.twitch.tv/app" ""))
+      ""))),
+   :param-types [[:ref :stream/dest]]}
   {:name inputs-path,
    :params [account-id],
    :result :string,
@@ -146,28 +167,95 @@
     (string-concat account-id "/stream/live_inputs")),
    :param-types [:string]}
   {:name live-input-path,
-   :params [account-id input-uid],
+   :params [x],
    :result :string,
    :effects #{},
    :body
    (string-concat
-    (inputs-path account-id)
-    (string-concat "/" input-uid)),
-   :param-types [:string :string]}
+    (inputs-path
+     (record-get
+      [:record
+       :stream/account-uid
+       [[:account-id :string] [:input-uid :string]]]
+      x
+      :account-id))
+    (string-concat
+     "/"
+     (record-get
+      [:record
+       :stream/account-uid
+       [[:account-id :string] [:input-uid :string]]]
+      x
+      :input-uid))),
+   :param-types [[:ref :stream/account-uid]]}
   {:name outputs-path,
-   :params [account-id input-uid],
+   :params [x],
    :result :string,
    :effects #{},
-   :body
-   (string-concat (live-input-path account-id input-uid) "/outputs"),
-   :param-types [:string :string]}
+   :body (string-concat (live-input-path x) "/outputs"),
+   :param-types [[:ref :stream/account-uid]]}
   {:name live-input-summary,
-   :params [uid name whip-disp rtmps-disp rtmps-stream-key],
+   :params [x],
    :result :string,
    :effects #{},
    :body
    (let
-    [name-part
+    [uid
+     (record-get
+      [:record
+       :stream/summary
+       [[:uid :string]
+        [:name :string]
+        [:whip-disp :string]
+        [:rtmps-disp :string]
+        [:rtmps-stream-key :string]]]
+      x
+      :uid)
+     name
+     (record-get
+      [:record
+       :stream/summary
+       [[:uid :string]
+        [:name :string]
+        [:whip-disp :string]
+        [:rtmps-disp :string]
+        [:rtmps-stream-key :string]]]
+      x
+      :name)
+     whip-disp
+     (record-get
+      [:record
+       :stream/summary
+       [[:uid :string]
+        [:name :string]
+        [:whip-disp :string]
+        [:rtmps-disp :string]
+        [:rtmps-stream-key :string]]]
+      x
+      :whip-disp)
+     rtmps-disp
+     (record-get
+      [:record
+       :stream/summary
+       [[:uid :string]
+        [:name :string]
+        [:whip-disp :string]
+        [:rtmps-disp :string]
+        [:rtmps-stream-key :string]]]
+      x
+      :rtmps-disp)
+     rtmps-stream-key
+     (record-get
+      [:record
+       :stream/summary
+       [[:uid :string]
+        [:name :string]
+        [:whip-disp :string]
+        [:rtmps-disp :string]
+        [:rtmps-stream-key :string]]]
+      x
+      :rtmps-stream-key)
+     name-part
      (if
       (string=? name "")
       ""
@@ -183,9 +271,17 @@
     (string-concat
      d
      (string-concat " key=" (redact-key rtmps-stream-key)))),
-   :param-types [:string :string :string :string :string]}],
+   :param-types [[:ref :stream/summary]]}],
  :oracle-value nil,
- :schema-identities nil,
+ :schema-identities
+ #:stream{:account-uid
+          "2bed2c087d22374247442a83f99f963962456d8e3d1158c35354dc16512df636",
+          :dest
+          "03000b102dbe36896376469a2cf1c5997331ea2567105e8c664e8c2ab8997c1f",
+          :flags
+          "d79cd33645644af68960a9f824d2aa97ed7792149eadeccbe79a8b5223858fe2",
+          :summary
+          "e37ff8153f1c233d2e9a559d3cadce15be461e8a9eee9825a880f231bd1bc59d"},
  :exports
  [api-base
   digit-char
@@ -201,7 +297,27 @@
   live-input-path
   outputs-path
   live-input-summary],
- :schemas nil,
+ :schemas
+ #:stream{:flags
+          [:record
+           :stream/flags
+           [[:url :string] [:stream-key :string]]],
+          :dest
+          [:record
+           :stream/dest
+           [[:platform :string] [:variant :string]]],
+          :account-uid
+          [:record
+           :stream/account-uid
+           [[:account-id :string] [:input-uid :string]]],
+          :summary
+          [:record
+           :stream/summary
+           [[:uid :string]
+            [:name :string]
+            [:whip-disp :string]
+            [:rtmps-disp :string]
+            [:rtmps-stream-key :string]]]},
  :effects #{},
  :blocks [],
  :entry nil}

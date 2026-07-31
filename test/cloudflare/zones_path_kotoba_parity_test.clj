@@ -11,6 +11,15 @@
 
 (def port-source (slurp "kotoba/zones_path_core.kotoba"))
 
+(def ^:private kv-lit
+  "[:record :zones/kv [[:k :string] [:v :string]]]")
+(def ^:private path-qs-lit
+  "[:record :zones/path-qs [[:path :string] [:qs :string]]]")
+(def ^:private zone-name-lit
+  "[:record :zones/zone-name [[:zone-id :string] [:name :string]]]")
+(def ^:private match-lit
+  "[:record :zones/match [[:expected :string] [:actual :string]]]")
+
 (def export-prefix
   (str "list-zones-path list-zones-per-page list-zones-query list-zones-request-path "
        "dns-records-path dns-name-query-pair dns-records-path-with-name "
@@ -68,10 +77,11 @@
         actual (compile-string-cases
                 {"base" (str "(dns-records-path " (kotoba-literal zone) ")")
                  "qpair" (str "(dns-name-query-pair " (kotoba-literal host) ")")
-                 "with" (str "(dns-records-path-with-name " (kotoba-literal zone) " "
-                             (kotoba-literal host) ")")
-                 "noq" (str "(with-query " (kotoba-literal (str "/zones/" zone "/dns_records"))
-                            " \"\")")})]
+                 "with" (str "(dns-records-path-with-name (record-new " zone-name-lit " "
+                             (kotoba-literal zone) " " (kotoba-literal host) "))")
+                 "noq" (str "(with-query (record-new " path-qs-lit " "
+                            (kotoba-literal (str "/zones/" zone "/dns_records"))
+                            " \"\"))")})]
     (is (= (str "/zones/" zone "/dns_records") (get actual "base")))
     (is (= (str "name=" host) (get actual "qpair")))
     (is (= (str "/zones/" zone "/dns_records?name=" host) (get actual "with")))
@@ -87,15 +97,15 @@
 (deftest hostname-matches-for-discovery-filters
   ;; zone-by-name, custom-domains hostname filter, pages domain membership
   (let [actual (compile-i64-cases
-                {"eq" (str "(hostname-matches? "
+                {"eq" (str "(hostname-matches? (record-new " match-lit " "
                            (kotoba-literal "itonami.cloud") " "
-                           (kotoba-literal "itonami.cloud") ")")
-                 "ne" (str "(hostname-matches? "
+                           (kotoba-literal "itonami.cloud") "))")
+                 "ne" (str "(hostname-matches? (record-new " match-lit " "
                            (kotoba-literal "itonami.cloud") " "
-                           (kotoba-literal "app.itonami.cloud") ")")
-                 "cd" (str "(hostname-matches? "
+                           (kotoba-literal "app.itonami.cloud") "))")
+                 "cd" (str "(hostname-matches? (record-new " match-lit " "
                            (kotoba-literal "app.itonami.cloud") " "
-                           (kotoba-literal "app.itonami.cloud") ")")})]
+                           (kotoba-literal "app.itonami.cloud") "))")})]
     (is (= 1 (get actual "eq")))
     (is (= 0 (get actual "ne")))
     (is (= 1 (get actual "cd")))

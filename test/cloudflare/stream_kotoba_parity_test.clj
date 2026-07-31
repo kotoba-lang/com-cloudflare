@@ -10,6 +10,13 @@
 
 (def port-source (slurp "kotoba/stream_core.kotoba"))
 
+(def ^:private flags-lit
+  "[:record :stream/flags [[:url :string] [:stream-key :string]]]")
+(def ^:private dest-lit
+  "[:record :stream/dest [[:platform :string] [:variant :string]]]")
+(def ^:private account-uid-lit
+  "[:record :stream/account-uid [[:account-id :string] [:input-uid :string]]]")
+
 (def export-prefix
   "api-base digit-char nat-str i64-str blank? rtmp-scheme? has-whitespace? redact-key validate-flags destination-url inputs-path live-input-path outputs-path")
 
@@ -81,8 +88,9 @@
                 {:url "" :stream-key "k"}
                 {:url "rtmps://x/y" :stream-key ""}]
         call (fn [{:keys [url stream-key]}]
-               (str "(validate-flags " (kotoba-literal (str url)) " "
-                    (kotoba-literal (str stream-key)) ")"))
+               (str "(validate-flags (record-new " flags-lit " "
+                    (kotoba-literal (str url)) " "
+                    (kotoba-literal (str stream-key)) "))"))
         cases (into {} (map-indexed (fn [i m] [(str "vf_" i) (call m)]) corpus))
         actual (compile-i64-cases cases)]
     (doseq [[i m] (map-indexed vector corpus)]
@@ -100,8 +108,9 @@
         cases (into {} (map-indexed
                         (fn [i [p v]]
                           [(str "du_" i)
-                           (str "(destination-url " (kotoba-literal p) " "
-                                (kotoba-literal v) ")")])
+                           (str "(destination-url (record-new " dest-lit " "
+                                (kotoba-literal p) " "
+                                (kotoba-literal v) "))")])
                         corpus))
         actual (compile-string-cases cases)]
     (doseq [[i [p v]] (map-indexed vector corpus)]
@@ -114,10 +123,12 @@
         uid "in1"
         actual (compile-string-cases
                 {"ip" (str "(inputs-path " (kotoba-literal account) ")")
-                 "lip" (str "(live-input-path " (kotoba-literal account) " "
-                            (kotoba-literal uid) ")")
-                 "op" (str "(outputs-path " (kotoba-literal account) " "
-                           (kotoba-literal uid) ")")})]
+                 "lip" (str "(live-input-path (record-new " account-uid-lit " "
+                            (kotoba-literal account) " "
+                            (kotoba-literal uid) "))")
+                 "op" (str "(outputs-path (record-new " account-uid-lit " "
+                           (kotoba-literal account) " "
+                           (kotoba-literal uid) "))")})]
     (is (= (:path (stream/list-live-inputs-request account))
            (get actual "ip")))
     (is (= (:path (stream/live-input-request account uid))

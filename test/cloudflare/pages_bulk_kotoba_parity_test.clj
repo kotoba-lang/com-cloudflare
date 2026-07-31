@@ -10,6 +10,11 @@
 
 (def port-source (slurp "kotoba/pages_bulk_core.kotoba"))
 
+(def ^:private account-project-lit
+  "[:record :pages/account-project [[:account-id :string] [:project-name :string]]]")
+(def ^:private hash-known-lit
+  "[:record :pages/hash-known [[:hash :string] [:known0 :string] [:known1 :string]]]")
+
 (def export-prefix
   (str "max-pages-assets max-asset-path max-asset-bytes "
        "blank? ws? asset-char? asset-body-ok? validate-asset-path "
@@ -62,9 +67,9 @@
             "mp" "(max-asset-path)"
             "mb" "(max-asset-bytes)"})
         s (compile-string-cases
-           {"tok" (str "(pages-upload-token-path "
+           {"tok" (str "(pages-upload-token-path (record-new " account-project-lit " "
                        (kotoba-literal "acct1") " "
-                       (kotoba-literal "site") ")")
+                       (kotoba-literal "site") "))")
             "gm" "(get-method)"
             "pm" "(post-method)"
             "up" "(upload-assets-path)"})]
@@ -108,12 +113,15 @@
 
 (deftest missing-hash-membership
   (let [n (compile-i64-cases
-           {"k" (str "(hash-known? " (kotoba-literal "aa") " "
-                     (kotoba-literal "aa") " " (kotoba-literal "bb") ")")
-            "m" (str "(missing-hash? " (kotoba-literal "cc") " "
-                     (kotoba-literal "aa") " " (kotoba-literal "bb") ")")
-            "k2" (str "(hash-known? " (kotoba-literal "bb") " "
-                      (kotoba-literal "aa") " " (kotoba-literal "bb") ")")})]
+           {"k" (str "(hash-known? (record-new " hash-known-lit " "
+                     (kotoba-literal "aa") " "
+                     (kotoba-literal "aa") " " (kotoba-literal "bb") "))")
+            "m" (str "(missing-hash? (record-new " hash-known-lit " "
+                     (kotoba-literal "cc") " "
+                     (kotoba-literal "aa") " " (kotoba-literal "bb") "))")
+            "k2" (str "(hash-known? (record-new " hash-known-lit " "
+                      (kotoba-literal "bb") " "
+                      (kotoba-literal "aa") " " (kotoba-literal "bb") "))")})]
     (is (= 1 (get n "k")))
     (is (= 1 (get n "m")))
     (is (= 1 (get n "k2")))

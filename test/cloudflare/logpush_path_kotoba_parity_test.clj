@@ -7,6 +7,8 @@
             [kotoba.kir :as ir]))
 
 (def port-source (slurp "kotoba/logpush_path_core.kotoba"))
+(def ^:private zone-job-lit
+  "[:record :logpush/zone-job [[:zone-id :string] [:job-id :string]]]")
 (def export-prefix "datasets-path jobs-path job-path")
 
 (defn- kotoba-literal [s]
@@ -30,8 +32,9 @@
         actual (compile-string-cases
                 {"d" (str "(datasets-path " (kotoba-literal zone) ")")
                  "j" (str "(jobs-path " (kotoba-literal zone) ")")
-                 "jd" (str "(job-path " (kotoba-literal zone) " "
-                           (kotoba-literal job) ")")})]
+                 "jd" (str "(job-path (record-new " zone-job-lit " "
+                           (kotoba-literal zone) " "
+                           (kotoba-literal job) "))")})]
     (is (= (str "/zones/" zone "/logpush/datasets") (get actual "d")))
     (is (= (str "/zones/" zone "/logpush/jobs") (get actual "j")))
     (is (= (str "/zones/" zone "/logpush/jobs/" job) (get actual "jd")))))

@@ -1,4 +1,15 @@
 (ns stream-core
+  (:schemas {;; T5.2 native guest record
+             :stream/flags [:record :stream/flags
+                            [[:url :string] [:stream-key :string]]]
+             :stream/dest [:record :stream/dest
+                           [[:platform :string] [:variant :string]]]
+             :stream/account-uid [:record :stream/account-uid
+                                  [[:account-id :string] [:input-uid :string]]]
+             :stream/summary [:record :stream/summary
+                              [[:uid :string] [:name :string]
+                               [:whip-disp :string] [:rtmps-disp :string]
+                               [:rtmps-stream-key :string]]]})
   (:export [api-base digit-char nat-str i64-str blank?
             rtmp-scheme? has-whitespace? redact-key validate-flags
             destination-url inputs-path live-input-path outputs-path
@@ -60,8 +71,11 @@
          (string-substring stream-key 0 4)
          (string-concat "…<" (string-concat (i64-str n) " chars>")))))))
 
-(defn validate-flags [url :string stream-key :string] :i64
-  (let [url-blank (blank? url)
+(defn validate-flags [x [:ref :stream/flags]] :i64
+  ;; T5.2: url+stream-key on one guest record
+  (let [url (record-get x :url)
+        stream-key (record-get x :stream-key)
+        url-blank (blank? url)
         key-blank (blank? stream-key)
         f0 (if (= url-blank 1) 1 0)
         f1 (if (= url-blank 1)
@@ -76,40 +90,48 @@
              (if (string-contains? url stream-key) 16 0))]
     (+ f0 (+ f1 (+ f2 (+ f3 f4))))))
 
-(defn destination-url [platform :string variant :string] :string
+(defn destination-url [x [:ref :stream/dest]] :string
   ;; empty string ≡ cljc nil (unknown platform/variant)
-  (if (string=? platform "youtube")
-    (if (string=? variant "rtmps")
-      "rtmps://a.rtmps.youtube.com/live2"
-      (if (string=? variant "rtmp")
-        "rtmp://a.rtmp.youtube.com/live2"
-        (if (string=? variant "rtmp-backup")
-          "rtmp://b.rtmp.youtube.com/live2?backup=1"
-          "")))
-    (if (string=? platform "twitch")
+  ;; T5.2: platform+variant on one guest record
+  (let [platform (record-get x :platform)
+        variant (record-get x :variant)]
+    (if (string=? platform "youtube")
       (if (string=? variant "rtmps")
-        "rtmps://live.twitch.tv/app"
+        "rtmps://a.rtmps.youtube.com/live2"
         (if (string=? variant "rtmp")
-          "rtmp://live.twitch.tv/app"
-          ""))
-      "")))
+          "rtmp://a.rtmp.youtube.com/live2"
+          (if (string=? variant "rtmp-backup")
+            "rtmp://b.rtmp.youtube.com/live2?backup=1"
+            "")))
+      (if (string=? platform "twitch")
+        (if (string=? variant "rtmps")
+          "rtmps://live.twitch.tv/app"
+          (if (string=? variant "rtmp")
+            "rtmp://live.twitch.tv/app"
+            ""))
+        ""))))
 
 (defn inputs-path [account-id :string] :string
   (string-concat "/accounts/"
                  (string-concat account-id "/stream/live_inputs")))
 
-(defn live-input-path [account-id :string input-uid :string] :string
-  (string-concat (inputs-path account-id)
-                 (string-concat "/" input-uid)))
+(defn live-input-path [x [:ref :stream/account-uid]] :string
+  ;; T5.2: account-id+input-uid on one guest record
+  (string-concat (inputs-path (record-get x :account-id))
+                 (string-concat "/" (record-get x :input-uid))))
 
-(defn outputs-path [account-id :string input-uid :string] :string
-  (string-concat (live-input-path account-id input-uid) "/outputs"))
+(defn outputs-path [x [:ref :stream/account-uid]] :string
+  (string-concat (live-input-path x) "/outputs"))
 
-(defn live-input-summary [uid :string name :string
-                          whip-disp :string rtmps-disp :string
-                          rtmps-stream-key :string] :string
+(defn live-input-summary [x [:ref :stream/summary]] :string
   ;; cljc live-input-summary. Host pre-applies (or url "-") and (or name "").
-  (let [name-part (if (string=? name "")
+  ;; T5.2: summary fields on one guest record
+  (let [uid (record-get x :uid)
+        name (record-get x :name)
+        whip-disp (record-get x :whip-disp)
+        rtmps-disp (record-get x :rtmps-disp)
+        rtmps-stream-key (record-get x :rtmps-stream-key)
+        name-part (if (string=? name "")
                     ""
                     (string-concat " (" (string-concat name ")")))
         a (string-concat "live-input " uid)

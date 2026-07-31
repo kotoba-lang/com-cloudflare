@@ -27,14 +27,17 @@
         kir (:kir (compiler/compile-source src :wasm32-kotoba-v1 {}))]
     (into {} (map (fn [n] [n (ir/execute kir (symbol n) [])]) names))))
 
+(def ^:private summary-lit
+  "[:record :stream/summary [[:uid :string] [:name :string] [:whip-disp :string] [:rtmps-disp :string] [:rtmps-stream-key :string]]]")
+
 (defn- summary-call [{:keys [uid name whip-url rtmps-url rtmps-stream-key]}]
   ;; Mirror cljc (or x "-") / (or name) display projection at the host edge.
-  (str "(live-input-summary "
+  (str "(live-input-summary (record-new " summary-lit " "
        (kotoba-literal (or uid "")) " "
        (kotoba-literal (or name "")) " "
        (kotoba-literal (or whip-url "-")) " "
        (kotoba-literal (or rtmps-url "-")) " "
-       (kotoba-literal (or rtmps-stream-key "")) ")"))
+       (kotoba-literal (or rtmps-stream-key "")) "))"))
 
 (deftest live-input-summary-matches-stream-cljc
   (let [corpus [{:uid "abc" :name "cam-1"

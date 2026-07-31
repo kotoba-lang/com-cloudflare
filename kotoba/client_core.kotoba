@@ -1,4 +1,8 @@
 (ns client-core
+  (:schemas {;; T5.2 native guest record: multi-arg pure → single record
+             :client/kv [:record :client/kv [[:k :string] [:v :string]]]
+             :client/path-qs [:record :client/path-qs
+                              [[:path :string] [:qs :string]]]})
   (:export [api-base graphql-endpoint
             api-token-secret-name api-token-env-name
             default-content-type method-get method-post method-put method-delete
@@ -47,18 +51,22 @@
         (blank? (string-substring s 1 n))
         0))))
 
-(defn query-pair [k :string v :string] :string
+(defn query-pair [x [:ref :client/kv]] :string
   ;; cljc: (str (name k) "=" v) — host projects keyword name as string
-  (string-concat k (string-concat "=" v)))
+  ;; T5.2: k+v on one guest record
+  (string-concat (record-get x :k) (string-concat "=" (record-get x :v))))
 
-(defn with-query [path :string qs :string] :string
+(defn with-query [x [:ref :client/path-qs]] :string
   ;; empty qs ≡ no query map
-  (if (string=? qs "")
-    path
-    (string-concat path (string-concat "?" qs))))
+  ;; T5.2: path+qs on one guest record
+  (let [path (record-get x :path)
+        qs (record-get x :qs)]
+    (if (string=? qs "")
+      path
+      (string-concat path (string-concat "?" qs)))))
 
-(defn rest-url [path :string qs :string] :string
-  (string-concat (api-base) (with-query path qs)))
+(defn rest-url [x [:ref :client/path-qs]] :string
+  (string-concat (api-base) (with-query x)))
 
 (defn graphql-url [] :string
   (graphql-endpoint))

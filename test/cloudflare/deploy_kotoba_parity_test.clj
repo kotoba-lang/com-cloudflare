@@ -10,6 +10,28 @@
 
 (def port-source (slurp "kotoba/deploy_core.kotoba"))
 
+(def ^:private account-name-lit
+  "[:record :deploy/account-name [[:account-id :string] [:name :string]]]")
+(def ^:private multipart-part-lit
+  "[:record :deploy/multipart-part [[:boundary :string] [:name :string] [:filename :string] [:content-type :string] [:body :string]]]")
+(def ^:private parts-lit
+  "[:record :deploy/parts [[:part-a :string] [:part-b :string]]]")
+(def ^:private parts-close-lit
+  "[:record :deploy/parts-close [[:parts :string] [:boundary :string]]]")
+(def ^:private wrangler-lit
+  "[:record :deploy/wrangler [[:project :string] [:directory :string] [:wrangler-bin :string]]]")
+
+(defn- account-name-call [export acct name]
+  (str "(" export " (record-new " account-name-lit " " acct " " name "))"))
+
+(defn- multipart-part-call [boundary name filename ct body]
+  (str "(multipart-part (record-new " multipart-part-lit " "
+       boundary " " name " " filename " " ct " " body "))"))
+
+(defn- wrangler-call [project directory bin]
+  (str "(wrangler-pages-deploy-cmd (record-new " wrangler-lit " "
+       project " " directory " " bin "))"))
+
 (def export-prefix
   (str "max-account-id max-script-name max-script-bytes "
        "max-module-name max-modules blank? ws? "
@@ -123,12 +145,9 @@
         script "my-worker"
         project "site"
         actual (compile-string-cases
-                {"wsp" (str "(workers-script-path " (kotoba-literal acct) " "
-                            (kotoba-literal script) ")")
-                 "ppp" (str "(pages-project-path " (kotoba-literal acct) " "
-                            (kotoba-literal project) ")")
-                 "pdp" (str "(pages-deployments-path " (kotoba-literal acct) " "
-                            (kotoba-literal project) ")")})]
+                {"wsp" (account-name-call "workers-script-path" (kotoba-literal acct) (kotoba-literal script))
+                 "ppp" (account-name-call "pages-project-path" (kotoba-literal acct) (kotoba-literal project))
+                 "pdp" (account-name-call "pages-deployments-path" (kotoba-literal acct) (kotoba-literal project))})]
     (is (= (deploy/workers-script-path acct script) (get actual "wsp")))
     (is (= (deploy/pages-project-path acct project) (get actual "ppp")))
     (is (= (deploy/pages-deployments-path acct project) (get actual "pdp")))
@@ -142,13 +161,9 @@
 (deftest wrangler-cmd-matches-argv
   (let [join #(str/join " " %)
         actual (compile-string-cases
-                {"def" (str "(wrangler-pages-deploy-cmd "
-                            (kotoba-literal "site") " "
-                            (kotoba-literal "./dist") " \"\")")
-                 "abs" (str "(wrangler-pages-deploy-cmd "
-                            (kotoba-literal "site") " "
-                            (kotoba-literal "./dist") " "
-                            (kotoba-literal "/usr/local/bin/wrangler") ")")})
+                {"def" (wrangler-call (kotoba-literal "site") (kotoba-literal "./dist") "\"\"")
+                 "abs" (wrangler-call (kotoba-literal "site") (kotoba-literal "./dist")
+                                      (kotoba-literal "/usr/local/bin/wrangler"))})
         dir (compile-i64-cases
              {"ok" (str "(directory-ok? " (kotoba-literal "./dist") ")")
               "blank" (str "(directory-ok? " (kotoba-literal "") ")")
@@ -195,21 +210,22 @@
                {:name "main.js" :filename "main.js"
                 :content-type "application/javascript+module"
                 :body mod-body}])
-        ;; ABI ≤5: build parts then join+close (mirrors cljc map over parts)
-        part1 (str "(multipart-part " (kotoba-literal boundary) " "
-                   (kotoba-literal "metadata") " \"\" "
-                   (kotoba-literal "application/json") " "
-                   (kotoba-literal meta-body) ")")
-        part2 (str "(multipart-part " (kotoba-literal boundary) " "
-                   (kotoba-literal "main.js") " "
-                   (kotoba-literal "main.js") " "
-                   (kotoba-literal "application/javascript+module") " "
-                   (kotoba-literal mod-body) ")")
+        ;; T5.2: multipart helpers take guest records
+        part1 (multipart-part-call (kotoba-literal boundary)
+                                   (kotoba-literal "metadata") "\"\""
+                                   (kotoba-literal "application/json")
+                                   (kotoba-literal meta-body))
+        part2 (multipart-part-call (kotoba-literal boundary)
+                                   (kotoba-literal "main.js")
+                                   (kotoba-literal "main.js")
+                                   (kotoba-literal "application/javascript+module")
+                                   (kotoba-literal mod-body))
         actual (compile-string-cases
                 {"p1" part1
                  "p2" part2
-                 "enc" (str "(encode-parts-close (encode-parts " part1 " " part2 ") "
-                            (kotoba-literal boundary) ")")
+                 "enc" (str "(encode-parts-close (record-new " parts-close-lit " "
+                            "(encode-parts (record-new " parts-lit " " part1 " " part2 ")) "
+                            (kotoba-literal boundary) "))")
                  "ct" (str "(multipart-content-type " (kotoba-literal boundary) ")")
                  "close" (str "(multipart-close " (kotoba-literal boundary) ")")})
         flags (compile-i64-cases
