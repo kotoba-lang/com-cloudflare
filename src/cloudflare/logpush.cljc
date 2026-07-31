@@ -28,46 +28,32 @@
 
 (def ^:private oid :logpush-path)
 
-(defn- o [export args]
+(defn- o
+  "Call a pure export. Requires the shipped oracle on every platform (T6.4)."
+  [export args]
+  (oracle/require-ready! oid)
   (oracle/call oid export args))
 
 (defn- o-record
-  "T5.2: structural host map → call-record."
+  "T5.2: structural host map → call-record (requires shipped oracle)."
   [export host-map field-specs]
+  (oracle/require-ready! oid)
   (oracle/call-record oid export host-map field-specs))
-
-(defn- oracle-ready? []
-  (oracle/ready? oid))
-
-(defn- try-oracle
-  [thunk mirror-thunk]
-  (if (oracle-ready?)
-    (try
-      (thunk)
-      (catch #?(:clj Exception :cljs :default) _
-        (mirror-thunk)))
-    (mirror-thunk)))
 
 (defn datasets-path
   "REST path for Logpush datasets. JVM: kotoba `datasets-path`."
   [zone-id]
-  (try-oracle
-   #(o-record 'datasets-path {:zone-id zone-id} [[:zone-id :string]])
-   #(str "/zones/" zone-id "/logpush/datasets")))
+  (o-record 'datasets-path {:zone-id zone-id} [[:zone-id :string]]))
 
 (defn jobs-path
   "REST path for Logpush jobs collection. JVM: kotoba `jobs-path`."
   [zone-id]
-  (try-oracle
-   #(o-record 'jobs-path {:zone-id zone-id} [[:zone-id :string]])
-   #(str "/zones/" zone-id "/logpush/jobs")))
+  (o-record 'jobs-path {:zone-id zone-id} [[:zone-id :string]]))
 
 (defn job-path
   "REST path for one Logpush job. JVM: kotoba `job-path`."
   [zone-id job-id]
-  (try-oracle
-   #(o-record 'job-path {:zone-id zone-id :job-id job-id} [[:zone-id :string] [:job-id :string]])
-   #(str "/zones/" zone-id "/logpush/jobs/" job-id)))
+  (o-record 'job-path {:zone-id zone-id :job-id job-id} [[:zone-id :string] [:job-id :string]]))
 
 #?(:clj
 (defn datasets

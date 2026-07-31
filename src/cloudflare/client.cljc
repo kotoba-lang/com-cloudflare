@@ -18,9 +18,10 @@
   cloud-itonami.mail/jvm-http-fn) -- so every namespace here is testable
   with a stub, never only against a live account.
 
-  W6 product-shell authority (ADR-0012 + ADR-0014 cljs dual-source):
-  constants + URL/auth pure helpers DELEGATE to precompiled
-  client_core.kir.edn when oracle loadable (JVM or cljs/nbb).
+  W6 product-shell + T6.4: pure URL/auth helpers require the shipped
+  `:client` KIR on every platform. Host pure mirrors are gone — cljs/nbb
+  must preload shipped KIR (resources/ via nbb cwd, register-kir!, or
+  set-resource-loader!) before requiring this ns (ADR-0016).
   HTTP/JSON/getenv stay host."
   (:require [clojure.string :as str]
             #?(:clj [clojure.data.json :as json])
@@ -28,36 +29,23 @@
 
 (def ^:private oid :client)
 
-(defn- o [export args]
+(defn- o
+  "Call a pure export. Requires the shipped oracle on every platform (T6.4)."
+  [export args]
+  (oracle/require-ready! oid)
   (oracle/call oid export args))
 
 (defn- o-record
-  "T5.2: structural host map → call-record."
+  "T5.2: structural host map → call-record (requires shipped oracle)."
   [export host-map field-specs]
+  (oracle/require-ready! oid)
   (oracle/call-record oid export host-map field-specs))
 
-(defn- oracle-ready? []
-  (oracle/ready? oid))
-
-(defn- try-oracle
-  "Run oracle body; on failure use mirror."
-  [thunk mirror-thunk]
-  (if (oracle-ready?)
-    (try
-      (thunk)
-      (catch #?(:clj Exception :cljs :default) _
-        (mirror-thunk)))
-    (mirror-thunk)))
-
 (def api-base
-  (try-oracle
-   #(o 'api-base [])
-   (fn [] "https://api.cloudflare.com/client/v4")))
+  (o 'api-base []))
 
 (def graphql-endpoint
-  (try-oracle
-   #(o 'graphql-endpoint [])
-   #(str api-base "/graphql")))
+  (o 'graphql-endpoint []))
 
 #?(:clj
 (defn jvm-http-fn
@@ -87,61 +75,43 @@
 ;; secret-transport ADR 0145–0146). Hosts inject :fetch with the same reply
 ;; shape; default path reads only CLOUDFLARE_API_TOKEN by exact name.
 (def api-token-secret-name
-  (try-oracle
-   #(o 'api-token-secret-name [])
-   (fn [] "cloudflare-api-token")))
+  (o 'api-token-secret-name []))
 
 (def api-token-env-name
-  (try-oracle
-   #(o 'api-token-env-name [])
-   (fn [] "CLOUDFLARE_API_TOKEN")))
+  (o 'api-token-env-name []))
 
 (defn bearer-auth
-  "Authorization header value. Kotoba `bearer-auth` when ready."
+  "Authorization header value. Kotoba `bearer-auth` (T6.4 requires oracle)."
   [token]
-  (try-oracle
-   #(o-record 'bearer-auth {:token token} [[:token :string]])
-   #(str "Bearer " token)))
+  (o-record 'bearer-auth {:token token} [[:token :string]]))
 
 (defn rest-url
   "Absolute REST URL for path + query string (no leading `?` in qs).
-   Kotoba `rest-url` when ready."
+   Kotoba `rest-url` (T6.4 requires oracle)."
   [path qs]
-  (try-oracle
-   #(o-record 'rest-url {:path path :qs qs} [[:path :string] [:qs :string]])
-   #(if (str/blank? qs)
-      (str api-base path)
-      (str api-base path "?" qs))))
+  (o-record 'rest-url {:path path :qs qs} [[:path :string] [:qs :string]]))
 
 (defn query-pair
-  "One `k=v` query fragment. Kotoba `query-pair` when ready."
+  "One `k=v` query fragment. Kotoba `query-pair` (T6.4 requires oracle)."
   [k v]
-  (try-oracle
-   #(o-record 'query-pair {:k k :v v} [[:k :string] [:v :string]])
-   #(str k "=" v)))
+  (o-record 'query-pair {:k k :v v} [[:k :string] [:v :string]]))
 
 (defn transport-ok?
-  "True when HTTP status is a 2xx. Kotoba `transport-ok?` when ready."
+  "True when HTTP status is a 2xx. Kotoba `transport-ok?` (T6.4 requires oracle)."
   [status]
-  (try-oracle
-   #(= 1 (oracle/i64->host (o-record 'transport-ok? {:status status} [[:status :i64]])))
-   #(< status 300)))
+  (= 1 (oracle/i64->host (o-record 'transport-ok? {:status status} [[:status :i64]]))))
 
 (defn prefer-explicit-token?
   "True when a non-blank explicit token should win over fetch.
-   Kotoba `prefer-explicit-token?` when ready."
+   Kotoba `prefer-explicit-token?` (T6.4 requires oracle)."
   [token]
-  (try-oracle
-   #(= 1 (oracle/i64->host (o-record 'prefer-explicit-token? {:token token} [[:token :string]])))
-   #(and (string? token) (not (str/blank? token)))))
+  (= 1 (oracle/i64->host (o-record 'prefer-explicit-token? {:token token} [[:token :string]]))))
 
 (defn secret-name-matches?
   "True when `name` is the api-token secret id.
-   Kotoba `secret-name-matches?` when ready."
+   Kotoba `secret-name-matches?` (T6.4 requires oracle)."
   [name]
-  (try-oracle
-   #(= 1 (oracle/i64->host (o-record 'secret-name-matches? {:name name} [[:name :string]])))
-   #(= name api-token-secret-name)))
+  (= 1 (oracle/i64->host (o-record 'secret-name-matches? {:name name} [[:name :string]]))))
 
 #?(:clj
 (defn env-token-fetch

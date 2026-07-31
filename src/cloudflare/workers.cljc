@@ -17,49 +17,35 @@
 
 (def ^:private oid :workers-path)
 
-(defn- o [export args]
+(defn- o
+  "Call a pure export. Requires the shipped oracle on every platform (T6.4)."
+  [export args]
+  (oracle/require-ready! oid)
   (oracle/call oid export args))
 
 (defn- o-record
-  "T5.2: structural host map → call-record."
+  "T5.2: structural host map → call-record (requires shipped oracle)."
   [export host-map field-specs]
+  (oracle/require-ready! oid)
   (oracle/call-record oid export host-map field-specs))
-
-(defn- oracle-ready? []
-  (oracle/ready? oid))
-
-(defn- try-oracle
-  [thunk mirror-thunk]
-  (if (oracle-ready?)
-    (try
-      (thunk)
-      (catch #?(:clj Exception :cljs :default) _
-        (mirror-thunk)))
-    (mirror-thunk)))
 
 (defn zone-routes-path
   "REST path for zone-level Worker routes.
    JVM: kotoba `zone-routes-path`."
   [zone-id]
-  (try-oracle
-   #(o-record 'zone-routes-path {:zone-id zone-id} [[:zone-id :string]])
-   #(str "/zones/" zone-id "/workers/routes")))
+  (o-record 'zone-routes-path {:zone-id zone-id} [[:zone-id :string]]))
 
 (defn custom-domains-path
   "REST path for account Workers Custom Domains.
    JVM: kotoba `custom-domains-path`."
   [account-id]
-  (try-oracle
-   #(o-record 'custom-domains-path {:account-id account-id} [[:account-id :string]])
-   #(str "/accounts/" account-id "/workers/domains")))
+  (o-record 'custom-domains-path {:account-id account-id} [[:account-id :string]]))
 
 (defn scripts-path
   "REST path for account Worker scripts metadata.
    JVM: kotoba `scripts-path`."
   [account-id]
-  (try-oracle
-   #(o-record 'scripts-path {:account-id account-id} [[:account-id :string]])
-   #(str "/accounts/" account-id "/workers/scripts")))
+  (o-record 'scripts-path {:account-id account-id} [[:account-id :string]]))
 
 #?(:clj
 (defn zone-routes
