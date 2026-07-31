@@ -17,8 +17,44 @@
        "i64-tally-get i64-tally-add "
        "sum2 sum3 sum4 report-ok?"))
 
+(def ^:private pair-lit
+  "[:record :parse/pair [[:a :i64] [:b :i64]]]")
+(def ^:private triple-lit
+  "[:record :parse/triple [[:a :i64] [:b :i64] [:c :i64]]]")
+(def ^:private quad-lit
+  "[:record :parse/quad [[:a :i64] [:b :i64] [:c :i64] [:d :i64]]]")
+(def ^:private str-get-lit
+  "[:record :parse/str-get [[:m [:map :string :i64]] [:k :string]]]")
+(def ^:private str-add-lit
+  "[:record :parse/str-add [[:m [:map :string :i64]] [:k :string] [:n :i64]]]")
+(def ^:private i64-get-lit
+  "[:record :parse/i64-get [[:m [:map :i64 :i64]] [:k :i64]]]")
+(def ^:private i64-add-lit
+  "[:record :parse/i64-add [[:m [:map :i64 :i64]] [:k :i64] [:n :i64]]]")
+
 (defn- kotoba-literal [s]
   (str \" (-> (str s) (str/replace "\\" "\\\\") (str/replace "\"" "\\\"")) \"))
+
+(defn- str-add-call [m-expr k n]
+  (str "(string-tally-add (record-new " str-add-lit " " m-expr " " k " " n "))"))
+
+(defn- str-get-call [m-expr k]
+  (str "(string-tally-get (record-new " str-get-lit " " m-expr " " k "))"))
+
+(defn- i64-add-call [m-expr k n]
+  (str "(i64-tally-add (record-new " i64-add-lit " " m-expr " " k " " n "))"))
+
+(defn- i64-get-call [m-expr k]
+  (str "(i64-tally-get (record-new " i64-get-lit " " m-expr " " k "))"))
+
+(defn- sum2-call [a b]
+  (str "(sum2 (record-new " pair-lit " " a " " b "))"))
+
+(defn- sum3-call [a b c]
+  (str "(sum3 (record-new " triple-lit " " a " " b " " c "))"))
+
+(defn- sum4-call [a b c d]
+  (str "(sum4 (record-new " quad-lit " " a " " b " " c " " d "))"))
 
 (defn- compile-i64-cases [cases]
   (let [defs (for [[name body] cases]
@@ -60,40 +96,38 @@
         report (analytics/parse-path-report response)
         rows (analytics/path-report-rows response)
         ;; Host projects each row into sequential string-tally-add / i64-tally-add
+        ;; T5.2: guest takes single :parse/str-add / :parse/i64-add records
         path-fold (reduce (fn [expr r]
-                            (str "(string-tally-add " expr " "
-                                 (kotoba-literal (:path r)) " " (:count r) ")"))
+                            (str-add-call expr (kotoba-literal (:path r)) (:count r)))
                           "(empty-string-tally)"
                           rows)
         device-fold (reduce (fn [expr r]
-                              (str "(string-tally-add " expr " "
-                                   (kotoba-literal (:device r)) " " (:count r) ")"))
+                              (str-add-call expr (kotoba-literal (:device r)) (:count r)))
                             "(empty-string-tally)"
                             rows)
         country-fold (reduce (fn [expr r]
-                               (str "(string-tally-add " expr " "
-                                    (kotoba-literal (:country r)) " " (:count r) ")"))
+                               (str-add-call expr (kotoba-literal (:country r)) (:count r)))
                              "(empty-string-tally)"
                              rows)
         status-fold (reduce (fn [expr r]
-                              (str "(i64-tally-add " expr " "
-                                   (:status r) " " (:count r) ")"))
+                              (i64-add-call expr (:status r) (:count r)))
                             "(empty-i64-tally)"
                             rows)
-        total-expr (str "(sum3 " (str/join " " (map :count rows)) ")")
+        counts (mapv :count rows)
+        total-expr (sum3-call (counts 0) (counts 1) (counts 2))
         actual (compile-i64-cases
-                {"pa" (str "(string-tally-get " path-fold " " (kotoba-literal "/a") ")")
-                 "pb" (str "(string-tally-get " path-fold " " (kotoba-literal "/b") ")")
-                 "pc" (str "(string-tally-get " path-fold " " (kotoba-literal "/c") ")")
-                 "dd" (str "(string-tally-get " device-fold " " (kotoba-literal "desktop") ")")
-                 "dm" (str "(string-tally-get " device-fold " " (kotoba-literal "mobile") ")")
-                 "jp" (str "(string-tally-get " country-fold " " (kotoba-literal "JP") ")")
-                 "ch" (str "(string-tally-get " country-fold " " (kotoba-literal "CH") ")")
-                 "s200" (str "(i64-tally-get " status-fold " 200)")
-                 "s201" (str "(i64-tally-get " status-fold " 201)")
-                 "s404" (str "(i64-tally-get " status-fold " 404)")
+                {"pa" (str-get-call path-fold (kotoba-literal "/a"))
+                 "pb" (str-get-call path-fold (kotoba-literal "/b"))
+                 "pc" (str-get-call path-fold (kotoba-literal "/c"))
+                 "dd" (str-get-call device-fold (kotoba-literal "desktop"))
+                 "dm" (str-get-call device-fold (kotoba-literal "mobile"))
+                 "jp" (str-get-call country-fold (kotoba-literal "JP"))
+                 "ch" (str-get-call country-fold (kotoba-literal "CH"))
+                 "s200" (i64-get-call status-fold 200)
+                 "s201" (i64-get-call status-fold 201)
+                 "s404" (i64-get-call status-fold 404)
                  "tot" total-expr
-                 "miss" (str "(string-tally-get " path-fold " " (kotoba-literal "/z") ")")})]
+                 "miss" (str-get-call path-fold (kotoba-literal "/z"))})]
     (is (true? (:ok? report)))
     (is (= 22 (get actual "pa") (get (:by-path report) "/a")))
     (is (= 3 (get actual "pb") (get (:by-path report) "/b")))
@@ -117,10 +151,10 @@
         unqs (mapv :uniques days)
         bytes (mapv :bytes days)
         actual (compile-i64-cases
-                {"req" (str "(sum2 " (str/join " " reqs) ")")
-                 "pv" (str "(sum2 " (str/join " " pvs) ")")
-                 "unq" (str "(sum2 " (str/join " " unqs) ")")
-                 "by" (str "(sum2 " (str/join " " bytes) ")")})]
+                {"req" (sum2-call (reqs 0) (reqs 1))
+                 "pv" (sum2-call (pvs 0) (pvs 1))
+                 "unq" (sum2-call (unqs 0) (unqs 1))
+                 "by" (sum2-call (bytes 0) (bytes 1))})]
     (is (true? (:ok? report)))
     (is (= (:requests (:totals report)) (get actual "req")))
     (is (= (:page-views (:totals report)) (get actual "pv")))
@@ -132,9 +166,9 @@
 
 (deftest sum-helpers
   (let [actual (compile-i64-cases
-                {"s2" "(sum2 1 2)"
-                 "s3" "(sum3 1 2 3)"
-                 "s4" "(sum4 1 2 3 4)"})]
+                {"s2" (sum2-call 1 2)
+                 "s3" (sum3-call 1 2 3)
+                 "s4" (sum4-call 1 2 3 4)})]
     (is (= 3 (get actual "s2")))
     (is (= 6 (get actual "s3")))
     (is (= 10 (get actual "s4")))))
