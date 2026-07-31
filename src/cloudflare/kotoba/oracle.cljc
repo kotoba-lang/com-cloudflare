@@ -1,6 +1,6 @@
 ;; cloudflare.kotoba.oracle — product-shell loader for precompiled pure-request KIR.
 ;;
-;; Authority dual-source pattern (W6 product-shell cutover, murakumo#86/#122 form):
+;; Authority product-shell pattern (W6 + T6.4 mirror-delete):
 ;;   1. SSoT source:  kotoba/*_core.kotoba
 ;;   2. Ship artifact: resources/cloudflare/oracle/*.kir.edn  (precompiled KIR)
 ;;   3. Host public API delegates here instead of re-implementing pure truth
@@ -222,6 +222,33 @@
   "Known oracle ids shipped as product-shell artifacts."
   []
   (keys catalog))
+
+(defn require-ready!
+  "Throw unless `oracle-id` is loadable. Product shells that have deleted cljs
+   host mirrors call this instead of soft-falling back (T6.4).
+
+   Entry points should call `preload!` / `preload-catalog!` once so this is
+   cheap (cache hit) on the product path."
+  [oracle-id]
+  (when-not (ready? oracle-id)
+    (throw (ex-info "kotoba oracle not ready (T6.4 requires shipped KIR)"
+                    {:oracle-id oracle-id
+                     :hint "preload-catalog! / register-kir! / set-resource-loader!, or run nbb from repo root with resources/ present"})))
+  true)
+
+(defn preload!
+  "Load (and cache) each oracle-id. nbb/browser entrypoints call this once so
+   product shells can drop cljs host mirrors (T6.4 preload guarantee).
+   Returns the number of ids loaded."
+  [oracle-ids]
+  (doseq [id oracle-ids]
+    (load-kir id))
+  (count oracle-ids))
+
+(defn preload-catalog!
+  "Load every catalog id into the cache. See `preload!`."
+  []
+  (preload! (keys catalog)))
 
 (defn catalog-count
   "Number of shipped product-shell oracle artifacts."

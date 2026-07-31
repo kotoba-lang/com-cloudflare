@@ -28,29 +28,22 @@
 (def ^:private bulk-oid :pages-bulk)
 
 (defn- o
-  ([export args] (oracle/call oid export args))
-  ([oracle-id export args] (oracle/call oracle-id export args)))
+  "Call a pure export. Requires the shipped oracle on every platform (T6.4)."
+  ([export args]
+   (oracle/require-ready! oid)
+   (oracle/call oid export args))
+  ([oracle-id export args]
+   (oracle/require-ready! oracle-id)
+   (oracle/call oracle-id export args)))
 
 (defn- o-record
-  "T5.2: structural host map → call-record."
+  "T5.2: structural host map → call-record (requires shipped oracle)."
   ([export host-map field-specs]
+   (oracle/require-ready! oid)
    (oracle/call-record oid export host-map field-specs))
   ([oracle-id export host-map field-specs]
+   (oracle/require-ready! oracle-id)
    (oracle/call-record oracle-id export host-map field-specs)))
-
-(defn- oracle-ready?
-  ([] (oracle/ready? oid))
-  ([oracle-id] (oracle/ready? oracle-id)))
-
-(defn- try-oracle
-  ([thunk mirror-thunk] (try-oracle oid thunk mirror-thunk))
-  ([oracle-id thunk mirror-thunk]
-   (if (oracle-ready? oracle-id)
-     (try
-       (thunk)
-       (catch #?(:clj Exception :cljs :default) _
-         (mirror-thunk)))
-     (mirror-thunk))))
 
 (defn- tag->err
   "Oracle bare tag → :deploy/<tag> keyword, or nil when ok (empty)."
@@ -59,70 +52,35 @@
     (keyword "deploy" (str tag))))
 
 (def max-script-name
-  (try-oracle
-   #(oracle/i64->host (o 'max-script-name []))
-   (fn [] 64)))
+  (oracle/i64->host (o 'max-script-name [])))
 (def max-account-id
-  (try-oracle
-   #(oracle/i64->host (o 'max-account-id []))
-   (fn [] 64)))
+  (oracle/i64->host (o 'max-account-id [])))
 (def max-module-name
-  (try-oracle
-   #(oracle/i64->host (o 'max-module-name []))
-   (fn [] 128)))
+  (oracle/i64->host (o 'max-module-name [])))
 (def max-script-bytes
-  (try-oracle
-   #(oracle/i64->host (o 'max-script-bytes []))
-   (fn [] 5242880))) ; 5 MiB per module body bound for plan validation
+  (oracle/i64->host (o 'max-script-bytes []))) ; 5 MiB per module body bound for plan validation
 (def max-modules
-  (try-oracle
-   #(oracle/i64->host (o 'max-modules []))
-   (fn [] 16)))
+  (oracle/i64->host (o 'max-modules [])))
 (def max-pages-assets
-  (try-oracle
-   bulk-oid
-   #(oracle/i64->host (o bulk-oid 'max-pages-assets []))
-   (fn [] 512)))
+  (oracle/i64->host (o bulk-oid 'max-pages-assets [])))
 (def max-asset-path
-  (try-oracle
-   bulk-oid
-   #(oracle/i64->host (o bulk-oid 'max-asset-path []))
-   (fn [] 512)))
+  (oracle/i64->host (o bulk-oid 'max-asset-path [])))
 (def max-asset-bytes
-  (try-oracle
-   bulk-oid
-   #(oracle/i64->host (o bulk-oid 'max-asset-bytes []))
-   (fn [] 2097152))) ; 2 MiB per text asset in pure plan bounds
+  (oracle/i64->host (o bulk-oid 'max-asset-bytes []))) ; 2 MiB per text asset in pure plan bounds
 
 (declare encode-multipart)
 
 (defn validate-account-id
   "Pure account-id policy. nil when ok, else error keyword.
-   Kotoba `validate-account-id` when ready."
+   Kotoba `validate-account-id` (T6.4 requires oracle)."
   [account-id]
-  (try-oracle
-   #(tag->err (o-record 'validate-account-id {:account-id account-id} [[:account-id :string]]))
-   (fn []
-     (let [s (str account-id)]
-       (cond
-         (str/blank? s) :deploy/empty-account
-         (> (count s) max-account-id) :deploy/account-too-long
-         (not (re-matches #"[A-Za-z0-9_-]+" s)) :deploy/bad-account
-         :else nil)))))
+  (tag->err (o-record 'validate-account-id {:account-id account-id} [[:account-id :string]])))
 
 (defn validate-script-name
   "Pure Worker script name policy (CF: letters, numbers, underscore, hyphen).
-   Kotoba `validate-script-name` when ready."
+   Kotoba `validate-script-name` (T6.4 requires oracle)."
   [script-name]
-  (try-oracle
-   #(tag->err (o-record 'validate-script-name {:script-name script-name} [[:script-name :string]]))
-   (fn []
-     (let [s (str script-name)]
-       (cond
-         (str/blank? s) :deploy/empty-script
-         (> (count s) max-script-name) :deploy/script-too-long
-         (not (re-matches #"[A-Za-z0-9][A-Za-z0-9_-]*" s)) :deploy/bad-script
-         :else nil)))))
+  (tag->err (o-record 'validate-script-name {:script-name script-name} [[:script-name :string]])))
 
 (defn validate-project-name
   "Pure Pages project name policy (same charset as script names)."
@@ -137,9 +95,7 @@
                      (validate-script-name script-name))]
     (throw (ex-info "cloudflare.deploy path validation failed"
                     {:phase :cloudflare-deploy :error err})))
-  (try-oracle
-   #(o-record 'workers-script-path {:account-id account-id :script-name script-name} [[:account-id :string] [:script-name :string]])
-   #(str "/accounts/" account-id "/workers/scripts/" script-name)))
+  (o-record 'workers-script-path {:account-id account-id :script-name script-name} [[:account-id :string] [:script-name :string]]))
 
 (defn pages-project-path
   "REST path for a Pages project resource.
@@ -149,75 +105,39 @@
                      (validate-project-name project-name))]
     (throw (ex-info "cloudflare.deploy path validation failed"
                     {:phase :cloudflare-deploy :error err})))
-  (try-oracle
-   #(o-record 'pages-project-path {:account-id account-id :project-name project-name} [[:account-id :string] [:project-name :string]])
-   #(str "/accounts/" account-id "/pages/projects/" project-name)))
+  (o-record 'pages-project-path {:account-id account-id :project-name project-name} [[:account-id :string] [:project-name :string]]))
 
 (defn pages-deployments-path
   "REST path for listing/creating Pages deployments (metadata API).
    JVM: kotoba `pages-deployments-path`."
   [account-id project-name]
-  (try-oracle
-   (fn []
-     (pages-project-path account-id project-name)
-     (o-record 'pages-deployments-path {:account-id account-id :project-name project-name} [[:account-id :string] [:project-name :string]]))
-   #(str (pages-project-path account-id project-name) "/deployments")))
+  (do (pages-project-path account-id project-name)
+     (o-record 'pages-deployments-path {:account-id account-id :project-name project-name} [[:account-id :string] [:project-name :string]])))
 
 (defn pages-upload-token-path
   "REST path for Pages Direct Upload JWT (GET).
    JVM: kotoba pages-bulk `pages-upload-token-path`."
   [account-id project-name]
-  (try-oracle
-   bulk-oid
-   (fn []
-     (pages-project-path account-id project-name)
-     (o-record bulk-oid 'pages-upload-token-path {:account-id account-id :project-name project-name} [[:account-id :string] [:project-name :string]]))
-   #(str (pages-project-path account-id project-name) "/upload-token")))
+  (do (pages-project-path account-id project-name)
+     (o-record bulk-oid 'pages-upload-token-path {:account-id account-id :project-name project-name} [[:account-id :string] [:project-name :string]])))
 
 (defn validate-asset-path
   "Pure relative asset path policy for Pages bulk (no .. / absolute / NUL).
-   Kotoba pages-bulk `validate-asset-path` when ready."
+   Kotoba pages-bulk `validate-asset-path` (T6.4 requires oracle)."
   [rel]
-  (try-oracle
-   bulk-oid
-   #(tag->err (o-record bulk-oid 'validate-asset-path {:rel rel} [[:rel :string]]))
-   (fn []
-     (let [s (str rel)]
-       (cond
-         (str/blank? s) :deploy/empty-asset-path
-         (> (count s) max-asset-path) :deploy/asset-path-too-long
-         (str/includes? s "\0") :deploy/null-byte
-         (str/includes? s "\\") :deploy/backslash
-         (str/starts-with? s "/") :deploy/absolute-asset
-         (str/starts-with? s "~") :deploy/home-escape
-         (str/includes? s "..") :deploy/asset-escape
-         (not (re-matches #"[A-Za-z0-9][A-Za-z0-9_./@+-]*" s)) :deploy/bad-asset-path
-         :else nil)))))
+  (tag->err (o-record bulk-oid 'validate-asset-path {:rel rel} [[:rel :string]])))
 
 (defn content-type-for-path
   "MIME type for a Pages bulk asset path.
    JVM: kotoba pages-bulk `content-type-for-path`."
   [path]
-  (try-oracle
-   bulk-oid
-   #(o-record bulk-oid 'content-type-for-path {:path path} [[:path :string]])
-   (fn []
-     (cond
-       (str/ends-with? path ".html") "text/html"
-       (str/ends-with? path ".css") "text/css"
-       (str/ends-with? path ".js") "application/javascript"
-       (str/ends-with? path ".json") "application/json"
-       (str/ends-with? path ".svg") "image/svg+xml"
-       :else "application/octet-stream"))))
+  (o-record bulk-oid 'content-type-for-path {:path path} [[:path :string]]))
 
 (defn upload-assets-path
   "REST path template for Pages Direct Upload asset batch.
-   Kotoba pages-bulk `upload-assets-path` when ready."
+   Kotoba pages-bulk `upload-assets-path` (T6.4 requires oracle)."
   []
-  (try-oracle
-   bulk-oid
-   #(o bulk-oid 'upload-assets-path [])
-   (fn [] "/pages/assets/upload")))
+  (o bulk-oid 'upload-assets-path []))
 
 (defn sha256-hex
   "SHA-256 hex of UTF-8 string. Pure on JVM; cljs injects via pages-asset-manifest."
@@ -326,9 +246,7 @@
                          :body meta-json}]
                  branch (conj {:name "branch" :body (str branch)}))
          body (encode-multipart boundary parts)
-         ct (try-oracle
-             #(o-record 'multipart-content-type {:boundary boundary} [[:boundary :string]])
-             #(str "multipart/form-data; boundary=" boundary))]
+         ct (o-record 'multipart-content-type {:boundary boundary} [[:boundary :string]])]
      {:method :post
       :path (pages-deployments-path account-id project-name)
       :content-type ct
@@ -403,14 +321,10 @@
   (when-not (string? script-body)
     (throw (ex-info "cloudflare.deploy put-plan requires string script-body"
                     {:phase :cloudflare-deploy})))
-  (when (try-oracle
-         #(zero? (oracle/i64->host (o-record 'script-body-ok-size? {:n (count script-body)} [[:n :i64]])))
-         #(> (count script-body) max-script-bytes))
+  (when (zero? (oracle/i64->host (o-record 'script-body-ok-size? {:n (count script-body)} [[:n :i64]])))
     (throw (ex-info "cloudflare.deploy script body too large"
                     {:phase :cloudflare-deploy :error :deploy/script-too-large})))
-  (let [ct (try-oracle
-            #(o 'put-content-type [])
-            (fn [] "application/javascript"))]
+  (let [ct (o 'put-content-type [])]
     {:method :put
      :path (workers-script-path account-id script-name)
      :content-type ct
@@ -419,17 +333,9 @@
 
 (defn validate-module-name
   "Pure ES-module name policy.
-   Kotoba `validate-module-name` when ready."
+   Kotoba `validate-module-name` (T6.4 requires oracle)."
   [module-name]
-  (try-oracle
-   #(tag->err (o-record 'validate-module-name {:module-name module-name} [[:module-name :string]]))
-   (fn []
-     (let [s (str module-name)]
-       (cond
-         (str/blank? s) :deploy/empty-module
-         (> (count s) max-module-name) :deploy/module-too-long
-         (not (re-matches #"[A-Za-z0-9][A-Za-z0-9_./-]*" s)) :deploy/bad-module
-         :else nil)))))
+  (tag->err (o-record 'validate-module-name {:module-name module-name} [[:module-name :string]])))
 
 (defn module-metadata
   "Pure Workers multipart `metadata` JSON map (ES modules).
@@ -448,47 +354,34 @@
 
 (defn- multipart-part
   "Encode one multipart form part (CRLF). Pure string.
-   JVM: kotoba `multipart-part`."
+   Kotoba `multipart-part` (T6.4 requires oracle)."
   [boundary {:keys [name filename content-type body]}]
-  #?(:clj (o-record 'multipart-part
-                        {:boundary boundary :name name :filename filename :content-type content-type :body body}
-                        [[:boundary :string] [:name :string] [:filename :string] [:content-type :string] [:body :string]])
-     :cljs
-     (str "--" boundary "
-"
-          "Content-Disposition: form-data; name="" name """
-          (when filename (str "; filename="" filename """))
-          "
-"
-          (when content-type (str "Content-Type: " content-type "
-"))
-          "
-"
-          body "
-")))
+  (o-record 'multipart-part
+            {:boundary boundary
+             :name name
+             :filename filename
+             :content-type content-type
+             :body body}
+            [[:boundary :string]
+             [:name :string]
+             [:filename :string]
+             [:content-type :string]
+             [:body :string]]))
 
 (defn encode-multipart
   "Pure multipart/form-data body for the given parts + boundary.
 
   parts: seq of {:name :filename? :content-type? :body}
-   JVM: boundary gate + join via kotoba multipart helpers."
+   Kotoba boundary gate + join via multipart helpers (T6.4 requires oracle)."
   [boundary parts]
-  #?(:clj
-     (do
-       (when-not (= 1 (long (o-record 'boundary-ok? {:boundary boundary} [[:boundary :string]])))
-         (throw (ex-info "cloudflare.deploy multipart boundary invalid"
-                         {:phase :cloudflare-deploy})))
-       (let [joined (apply str (map #(multipart-part boundary %) parts))]
-         (o-record 'encode-parts-close {:joined joined :boundary boundary} [[:joined :string] [:boundary :string]])))
-     :cljs
-     (do
-       (when (or (str/blank? (str boundary))
-                 (str/includes? (str boundary) " ")
-                 (str/includes? (str boundary) "\""))
-         (throw (ex-info "cloudflare.deploy multipart boundary invalid"
-                         {:phase :cloudflare-deploy})))
-       (str (apply str (map #(multipart-part boundary %) parts))
-            "--" boundary "--\r\n"))))
+  (when-not (= 1 (long (o-record 'boundary-ok? {:boundary boundary} [[:boundary :string]])))
+    (throw (ex-info "cloudflare.deploy multipart boundary invalid"
+                    {:phase :cloudflare-deploy})))
+  (let [joined (apply str (map #(multipart-part boundary %) parts))]
+    (o-record 'encode-parts-close
+              {:joined joined :boundary boundary}
+              [[:joined :string] [:boundary :string]])))
+
 
 (defn workers-module-put-plan
   "Pure plan for ES-module Worker upload (multipart metadata + modules).
@@ -516,9 +409,7 @@
                   (every? string? (vals modules)))
      (throw (ex-info "cloudflare.deploy modules must be non-empty string map"
                      {:phase :cloudflare-deploy})))
-   (when (try-oracle
-          #(zero? (oracle/i64->host (o-record 'modules-count-ok? {:n (count modules)} [[:n :i64]])))
-          #(> (count modules) max-modules))
+   (when (zero? (oracle/i64->host (o-record 'modules-count-ok? {:n (count modules)} [[:n :i64]])))
      (throw (ex-info "cloudflare.deploy too many modules"
                      {:phase :cloudflare-deploy :error :deploy/too-many-modules})))
    (doseq [[n body] modules]
@@ -551,9 +442,7 @@
                              :body body})
                           modules))
          body (encode-multipart boundary parts)
-         ct (try-oracle
-             #(o-record 'multipart-content-type {:boundary boundary} [[:boundary :string]])
-             #(str "multipart/form-data; boundary=" boundary))]
+         ct (o-record 'multipart-content-type {:boundary boundary} [[:boundary :string]])]
      {:method :put
       :path (workers-script-path account-id script-name)
       :content-type ct
@@ -583,10 +472,7 @@
    (when-let [err (validate-project-name project)]
      (throw (ex-info "cloudflare.deploy wrangler plan validation failed"
                      {:phase :cloudflare-deploy :error err})))
-   (when (try-oracle
-          #(zero? (oracle/i64->host (o-record 'directory-ok? {:directory directory} [[:directory :string]])))
-          #(or (str/blank? (str directory))
-               (str/includes? (str directory) " ")))
+   (when (zero? (oracle/i64->host (o-record 'directory-ok? {:directory directory} [[:directory :string]])))
      (throw (ex-info "cloudflare.deploy wrangler plan bad directory"
                      {:phase :cloudflare-deploy})))
    (let [bin (or (not-empty (str wrangler-bin)) "wrangler")]

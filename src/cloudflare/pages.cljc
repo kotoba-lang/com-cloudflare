@@ -8,33 +8,23 @@
 
 (def ^:private oid :workers-path)
 
-(defn- o [export args]
+(defn- o
+  "Call a pure export. Requires the shipped oracle on every platform (T6.4)."
+  [export args]
+  (oracle/require-ready! oid)
   (oracle/call oid export args))
 
 (defn- o-record
-  "T5.2: structural host map → call-record."
+  "T5.2: structural host map → call-record (requires shipped oracle)."
   [export host-map field-specs]
+  (oracle/require-ready! oid)
   (oracle/call-record oid export host-map field-specs))
-
-(defn- oracle-ready? []
-  (oracle/ready? oid))
-
-(defn- try-oracle
-  [thunk mirror-thunk]
-  (if (oracle-ready?)
-    (try
-      (thunk)
-      (catch #?(:clj Exception :cljs :default) _
-        (mirror-thunk)))
-    (mirror-thunk)))
 
 (defn projects-path
   "REST path for Pages projects under an account.
    JVM: kotoba `pages-projects-path`."
   [account-id]
-  (try-oracle
-   #(o-record 'pages-projects-path {:account-id account-id} [[:account-id :string]])
-   #(str "/accounts/" account-id "/pages/projects")))
+  (o-record 'pages-projects-path {:account-id account-id} [[:account-id :string]]))
 
 #?(:clj
 (defn projects

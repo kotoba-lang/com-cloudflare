@@ -28,25 +28,17 @@
 
 (def ^:private oid :stream)
 
-(defn- o [export args]
+(defn- o
+  "Call a pure export. Requires the shipped oracle on every platform (T6.4)."
+  [export args]
+  (oracle/require-ready! oid)
   (oracle/call oid export args))
 
 (defn- o-record
-  "T5.2: structural host map → call-record."
+  "T5.2: structural host map → call-record (requires shipped oracle)."
   [export host-map field-specs]
+  (oracle/require-ready! oid)
   (oracle/call-record oid export host-map field-specs))
-
-(defn- oracle-ready? []
-  (oracle/ready? oid))
-
-(defn- try-oracle
-  [thunk mirror-thunk]
-  (if (oracle-ready?)
-    (try
-      (thunk)
-      (catch #?(:clj Exception :cljs :default) _
-        (mirror-thunk)))
-    (mirror-thunk)))
 
 ;; ---------------------------------------------------------------------------
 ;; Known RTMP destinations
@@ -74,13 +66,11 @@
    JVM: kotoba `destination-url` (empty ≡ unknown)."
   ([platform] (destination-url platform :rtmps))
   ([platform variant]
-   (try-oracle
-    (fn []
-      (let [u (o-record 'destination-url
-                        {:a0 (name (keyword platform)) :a1 (name (keyword variant))}
-                        [[:a0 :raw] [:a1 :raw]])]
-        (when-not (str/blank? u) u)))
-    #(get-in destinations [(keyword platform) (keyword variant)]))))
+   (let [u (o-record 'destination-url
+                     {:platform (name (keyword platform))
+                      :variant (name (keyword variant))}
+                     [[:platform :string] [:variant :string]])]
+     (when-not (str/blank? u) u))))
 
 (defn redact-key
   "A stream key rendered safe to print: first 4 characters, then the length.
@@ -89,14 +79,7 @@
   terminal scrollback, a CI log, or a screenshot.
    JVM: kotoba `redact-key`."
   [stream-key]
-  (try-oracle
-   #(o-record 'redact-key {:stream-key stream-key} [[:stream-key :string]])
-   (fn []
-     (let [k (str stream-key)]
-       (cond
-         (str/blank? k) "<blank>"
-         (<= (count k) 4) (str "<" (count k) " chars>")
-         :else (str (subs k 0 4) "…<" (count k) " chars>"))))))
+  (o-record 'redact-key {:stream-key stream-key} [[:stream-key :string]]))
 
 ;; ---------------------------------------------------------------------------
 ;; Validation
@@ -123,9 +106,7 @@
 
    JVM: kotoba `validate-flags` bitset decoded to keywords."
   [{:keys [url stream-key]}]
-  (try-oracle
-   (fn []
-     (let [flags (oracle/i64->host
+  (let [flags (oracle/i64->host
                   (o-record 'validate-flags
                         {:url url :stream-key stream-key}
                         [[:url :string] [:stream-key :string]]))]
@@ -137,18 +118,6 @@
               [4 :missing-stream-key]
               [8 :whitespace-in-key]
               [16 :key-embedded-in-url]])))
-   (fn []
-     (let [url (str url)
-           k (str stream-key)]
-       (cond-> []
-         (str/blank? url) (conj :missing-url)
-         (and (not (str/blank? url))
-              (not (re-find #"^rtmps?://" url))) (conj :bad-scheme)
-         (str/blank? k) (conj :missing-stream-key)
-         (and (not (str/blank? k))
-              (re-find #"\s" k)) (conj :whitespace-in-key)
-         (and (not (str/blank? k))
-              (str/includes? url k)) (conj :key-embedded-in-url))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Pure request builders
@@ -161,23 +130,17 @@
 (defn inputs-path
   "REST path for live inputs collection. JVM: kotoba `inputs-path`."
   [account-id]
-  (try-oracle
-   #(o-record 'inputs-path {:account-id account-id} [[:account-id :string]])
-   #(str "/accounts/" account-id "/stream/live_inputs")))
+  (o-record 'inputs-path {:account-id account-id} [[:account-id :string]]))
 
 (defn live-input-path
   "REST path for one live input. JVM: kotoba `live-input-path`."
   [account-id input-uid]
-  (try-oracle
-   #(o-record 'live-input-path {:account-id account-id :input-uid input-uid} [[:account-id :string] [:input-uid :string]])
-   #(str (inputs-path account-id) "/" input-uid)))
+  (o-record 'live-input-path {:account-id account-id :input-uid input-uid} [[:account-id :string] [:input-uid :string]]))
 
 (defn outputs-path
   "REST path for live outputs under an input. JVM: kotoba `outputs-path`."
   [account-id input-uid]
-  (try-oracle
-   #(o-record 'outputs-path {:account-id account-id :input-uid input-uid} [[:account-id :string] [:input-uid :string]])
-   #(str (live-input-path account-id input-uid) "/outputs")))
+  (o-record 'outputs-path {:account-id account-id :input-uid input-uid} [[:account-id :string] [:input-uid :string]]))
 
 (defn create-live-input-request
   "POST a new live input.
@@ -283,15 +246,18 @@
   same reason the destination key is.
    JVM: kotoba `live-input-summary`."
   [{:keys [uid name whip-url rtmps-url rtmps-stream-key]}]
-  (try-oracle
-   #(o-record 'live-input-summary
-                        {:uid uid :name name :whip-url whip-url :rtmps-url rtmps-url :rtmps-stream-key rtmps-stream-key}
-                        [[:uid :string] [:name :string] [:whip-url :string] [:rtmps-url :string] [:rtmps-stream-key :string]])
-   #(str "live-input " uid
-         (when name (str " (" name ")"))
-         " whip=" (or whip-url "-")
-         " rtmps=" (or rtmps-url "-")
-         " key=" (redact-key rtmps-stream-key))))
+  ;; Guest defaults: missing whip/rtmps render as "-" (parity with stream_core).
+  (o-record 'live-input-summary
+            {:uid (or uid "")
+             :name (or name "")
+             :whip-url (or whip-url "-")
+             :rtmps-url (or rtmps-url "-")
+             :rtmps-stream-key (or rtmps-stream-key "")}
+            [[:uid :string]
+             [:name :string]
+             [:whip-url :string]
+             [:rtmps-url :string]
+             [:rtmps-stream-key :string]]))
 
 ;; ---------------------------------------------------------------------------
 ;; :clj convenience layer

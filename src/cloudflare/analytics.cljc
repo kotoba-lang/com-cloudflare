@@ -26,34 +26,25 @@
 (def ^:private parse-oid :analytics-parse)
 
 (defn- o
-  ([export args] (oracle/call oid export args))
-  ([oracle-id export args] (oracle/call oracle-id export args)))
+  "Call a pure export. Requires the shipped oracle on every platform (T6.4)."
+  ([export args]
+   (oracle/require-ready! oid)
+   (oracle/call oid export args))
+  ([oracle-id export args]
+   (oracle/require-ready! oracle-id)
+   (oracle/call oracle-id export args)))
 
 (defn- o-record
-  "T5.2: structural host map → call-record."
+  "T5.2: structural host map → call-record (requires shipped oracle)."
   ([export host-map field-specs]
+   (oracle/require-ready! oid)
    (oracle/call-record oid export host-map field-specs))
   ([oracle-id export host-map field-specs]
+   (oracle/require-ready! oracle-id)
    (oracle/call-record oracle-id export host-map field-specs)))
 
-(defn- oracle-ready?
-  ([] (oracle/ready? oid))
-  ([oracle-id] (oracle/ready? oracle-id)))
-
-(defn- try-oracle
-  ([thunk mirror-thunk] (try-oracle oid thunk mirror-thunk))
-  ([oracle-id thunk mirror-thunk]
-   (if (oracle-ready? oracle-id)
-     (try
-       (thunk)
-       (catch #?(:clj Exception :cljs :default) _
-         (mirror-thunk)))
-     (mirror-thunk))))
-
 (def daily-query
-  (try-oracle
-   #(o 'daily-query [])
-   (fn [] "query DailyTraffic($zoneTag: String!, $since: String!, $until: String!) { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequests1dGroups(limit: 31, filter: {date_geq: $since, date_leq: $until}) { sum { requests pageViews bytes } uniq { uniques } dimensions { date } } } } }")))
+  (o 'daily-query []))
 
 (defn path-query
   "GraphQL query text for the per-path/device/country/status breakdown.
@@ -61,16 +52,9 @@
   the caller (path-report-request) only passes a $host variable when a
   host filter was actually requested, so the query text and the variables
   must agree on whether $host exists.
-   Kotoba `path-query` when ready."
+   Kotoba `path-query` (T6.4 requires oracle)."
   [host?]
-  (try-oracle
-   #(o-record 'path-query {:host? (if host? 1 0)} [[:host? :i64]])
-   (fn []
-     (str "query PathTraffic($zoneTag: String!, $since: Time!, $until: Time!"
-          (when host? ", $host: String!")
-          ") { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequestsAdaptiveGroups(limit: 100, filter: {datetime_geq: $since, datetime_leq: $until"
-          (when host? ", clientRequestHTTPHost: $host")
-          "}) { count dimensions { clientRequestPath clientDeviceType clientCountryName edgeResponseStatus } } } } }"))))
+  (o-record 'path-query {:host? (if host? 1 0)} [[:host? :i64]]))
 
 (defn daily-report-request
   [{:keys [zone-tag since until]}]
@@ -93,10 +77,7 @@
    JVM: error gate via kotoba `report-ok?`; totals via host reduce (sum* available)."
   [response]
   (let [has-errors (if (seq (:errors response)) 1 0)
-        ok? (try-oracle
-             parse-oid
-             #(= 1 (oracle/i64->host (o-record parse-oid 'report-ok? {:has-errors has-errors} [[:has-errors :i64]])))
-             #(zero? has-errors))]
+        ok? (= 1 (oracle/i64->host (o-record parse-oid 'report-ok? {:has-errors has-errors} [[:has-errors :i64]])))]
     (if-not ok?
       {:ok? false :errors (:errors response)}
       (let [rows (groups response "httpRequests1dGroups")
@@ -144,10 +125,7 @@
    JVM: error gate via kotoba `report-ok?`; tally folds stay host maps."
   [response]
   (let [has-errors (if (seq (:errors response)) 1 0)
-        ok? (try-oracle
-             parse-oid
-             #(= 1 (oracle/i64->host (o-record parse-oid 'report-ok? {:has-errors has-errors} [[:has-errors :i64]])))
-             #(zero? has-errors))]
+        ok? (= 1 (oracle/i64->host (o-record parse-oid 'report-ok? {:has-errors has-errors} [[:has-errors :i64]])))]
     (if-not ok?
       {:ok? false :errors (:errors response)}
       (let [rows (path-report-rows response)

@@ -8,55 +8,39 @@
 
 (def ^:private oid :zones-path)
 
-(defn- o [export args]
+(defn- o
+  "Call a pure export. Requires the shipped oracle on every platform (T6.4)."
+  [export args]
+  (oracle/require-ready! oid)
   (oracle/call oid export args))
 
 (defn- o-record
-  "T5.2: structural host map → call-record."
+  "T5.2: structural host map → call-record (requires shipped oracle)."
   [export host-map field-specs]
+  (oracle/require-ready! oid)
   (oracle/call-record oid export host-map field-specs))
-
-(defn- oracle-ready? []
-  (oracle/ready? oid))
-
-(defn- try-oracle
-  [thunk mirror-thunk]
-  (if (oracle-ready?)
-    (try
-      (thunk)
-      (catch #?(:clj Exception :cljs :default) _
-        (mirror-thunk)))
-    (mirror-thunk)))
 
 (defn list-zones-path
   "REST path for zone listing (no query). JVM: kotoba `list-zones-path`."
   []
-  (try-oracle
-   #(o 'list-zones-path [])
-   (fn [] "/zones")))
+  (o 'list-zones-path []))
 
 (defn list-zones-request-path
   "Path+query string list-zones passes to rest! (`/zones?per_page=50`).
    JVM: kotoba `list-zones-request-path`."
   []
-  (try-oracle
-   #(o 'list-zones-request-path [])
-   (fn [] "/zones?per_page=50")))
+  (o 'list-zones-request-path []))
 
 (defn dns-records-path
   "REST path for DNS records under a zone. JVM: kotoba `dns-records-path`."
   [zone-id]
-  (try-oracle
-   #(o-record 'dns-records-path {:zone-id zone-id} [[:zone-id :string]])
-   #(str "/zones/" zone-id "/dns_records")))
+  (o-record 'dns-records-path {:zone-id zone-id} [[:zone-id :string]]))
 
 (defn hostname-matches?
   "Exact hostname/name equality used by zone-by-name and domain filters.
    JVM: kotoba `hostname-matches?`."
   [expected actual]
-  (try-oracle
-   #(= 1 (oracle/i64->host (o-record 'hostname-matches? {:expected expected :actual actual} [[:expected :string] [:actual :string]])))
-   #(= expected actual)))
+  (= 1 (oracle/i64->host (o-record 'hostname-matches? {:expected expected :actual actual} [[:expected :string] [:actual :string]]))))
 
 #?(:clj
 (defn list-zones
