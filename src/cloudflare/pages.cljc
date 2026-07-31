@@ -11,6 +11,11 @@
 (defn- o [export args]
   (oracle/call oid export args))
 
+(defn- o-record
+  "T5.2: structural host map → call-record."
+  [export host-map field-specs]
+  (oracle/call-record oid export host-map field-specs))
+
 (defn- oracle-ready? []
   (oracle/ready? oid))
 
@@ -28,7 +33,7 @@
    JVM: kotoba `pages-projects-path`."
   [account-id]
   (try-oracle
-   #(o 'pages-projects-path [(str account-id)])
+   #(o-record 'pages-projects-path {:account-id account-id} [[:account-id :string]])
    #(str "/accounts/" account-id "/pages/projects")))
 
 #?(:clj

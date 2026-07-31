@@ -31,6 +31,11 @@
 (defn- o [export args]
   (oracle/call oid export args))
 
+(defn- o-record
+  "T5.2: structural host map → call-record."
+  [export host-map field-specs]
+  (oracle/call-record oid export host-map field-specs))
+
 (defn- oracle-ready? []
   (oracle/ready? oid))
 
@@ -95,7 +100,7 @@
   "Authorization header value. Kotoba `bearer-auth` when ready."
   [token]
   (try-oracle
-   #(o 'bearer-auth [(str token)])
+   #(o-record 'bearer-auth {:token token} [[:token :string]])
    #(str "Bearer " token)))
 
 (defn rest-url
@@ -103,7 +108,7 @@
    Kotoba `rest-url` when ready."
   [path qs]
   (try-oracle
-   #(o 'rest-url [(str path) (str (or qs ""))])
+   #(o-record 'rest-url {:path path :qs qs} [[:path :string] [:qs :string]])
    #(if (str/blank? qs)
       (str api-base path)
       (str api-base path "?" qs))))
@@ -112,14 +117,14 @@
   "One `k=v` query fragment. Kotoba `query-pair` when ready."
   [k v]
   (try-oracle
-   #(o 'query-pair [(str k) (str v)])
+   #(o-record 'query-pair {:k k :v v} [[:k :string] [:v :string]])
    #(str k "=" v)))
 
 (defn transport-ok?
   "True when HTTP status is a 2xx. Kotoba `transport-ok?` when ready."
   [status]
   (try-oracle
-   #(= 1 (oracle/i64->host (o 'transport-ok? [(oracle/as-i64 status)])))
+   #(= 1 (oracle/i64->host (o-record 'transport-ok? {:status status} [[:status :i64]])))
    #(< status 300)))
 
 (defn prefer-explicit-token?
@@ -127,7 +132,7 @@
    Kotoba `prefer-explicit-token?` when ready."
   [token]
   (try-oracle
-   #(= 1 (oracle/i64->host (o 'prefer-explicit-token? [(str (or token ""))])))
+   #(= 1 (oracle/i64->host (o-record 'prefer-explicit-token? {:token token} [[:token :string]])))
    #(and (string? token) (not (str/blank? token)))))
 
 (defn secret-name-matches?
@@ -135,7 +140,7 @@
    Kotoba `secret-name-matches?` when ready."
   [name]
   (try-oracle
-   #(= 1 (oracle/i64->host (o 'secret-name-matches? [(str name)])))
+   #(= 1 (oracle/i64->host (o-record 'secret-name-matches? {:name name} [[:name :string]])))
    #(= name api-token-secret-name)))
 
 #?(:clj

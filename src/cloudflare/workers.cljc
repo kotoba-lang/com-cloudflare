@@ -20,6 +20,11 @@
 (defn- o [export args]
   (oracle/call oid export args))
 
+(defn- o-record
+  "T5.2: structural host map → call-record."
+  [export host-map field-specs]
+  (oracle/call-record oid export host-map field-specs))
+
 (defn- oracle-ready? []
   (oracle/ready? oid))
 
@@ -37,7 +42,7 @@
    JVM: kotoba `zone-routes-path`."
   [zone-id]
   (try-oracle
-   #(o 'zone-routes-path [(str zone-id)])
+   #(o-record 'zone-routes-path {:zone-id zone-id} [[:zone-id :string]])
    #(str "/zones/" zone-id "/workers/routes")))
 
 (defn custom-domains-path
@@ -45,7 +50,7 @@
    JVM: kotoba `custom-domains-path`."
   [account-id]
   (try-oracle
-   #(o 'custom-domains-path [(str account-id)])
+   #(o-record 'custom-domains-path {:account-id account-id} [[:account-id :string]])
    #(str "/accounts/" account-id "/workers/domains")))
 
 (defn scripts-path
@@ -53,7 +58,7 @@
    JVM: kotoba `scripts-path`."
   [account-id]
   (try-oracle
-   #(o 'scripts-path [(str account-id)])
+   #(o-record 'scripts-path {:account-id account-id} [[:account-id :string]])
    #(str "/accounts/" account-id "/workers/scripts")))
 
 #?(:clj

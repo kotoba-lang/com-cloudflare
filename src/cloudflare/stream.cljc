@@ -31,6 +31,11 @@
 (defn- o [export args]
   (oracle/call oid export args))
 
+(defn- o-record
+  "T5.2: structural host map → call-record."
+  [export host-map field-specs]
+  (oracle/call-record oid export host-map field-specs))
+
 (defn- oracle-ready? []
   (oracle/ready? oid))
 
@@ -71,8 +76,9 @@
   ([platform variant]
    (try-oracle
     (fn []
-      (let [u (o 'destination-url
-                 [(name (keyword platform)) (name (keyword variant))])]
+      (let [u (o-record 'destination-url
+                        {:a0 (name (keyword platform)) :a1 (name (keyword variant))}
+                        [[:a0 :raw] [:a1 :raw]])]
         (when-not (str/blank? u) u)))
     #(get-in destinations [(keyword platform) (keyword variant)]))))
 
@@ -84,7 +90,7 @@
    JVM: kotoba `redact-key`."
   [stream-key]
   (try-oracle
-   #(o 'redact-key [(str (or stream-key ""))])
+   #(o-record 'redact-key {:stream-key stream-key} [[:stream-key :string]])
    (fn []
      (let [k (str stream-key)]
        (cond
@@ -120,8 +126,9 @@
   (try-oracle
    (fn []
      (let [flags (oracle/i64->host
-                  (o 'validate-flags
-                     [(str (or url "")) (str (or stream-key ""))]))]
+                  (o-record 'validate-flags
+                        {:url url :stream-key stream-key}
+                        [[:url :string] [:stream-key :string]]))]
        (into []
              (keep (fn [[bit kw]]
                      (when (pos? (bit-and flags bit)) kw)))
@@ -155,21 +162,21 @@
   "REST path for live inputs collection. JVM: kotoba `inputs-path`."
   [account-id]
   (try-oracle
-   #(o 'inputs-path [(str account-id)])
+   #(o-record 'inputs-path {:account-id account-id} [[:account-id :string]])
    #(str "/accounts/" account-id "/stream/live_inputs")))
 
 (defn live-input-path
   "REST path for one live input. JVM: kotoba `live-input-path`."
   [account-id input-uid]
   (try-oracle
-   #(o 'live-input-path [(str account-id) (str input-uid)])
+   #(o-record 'live-input-path {:account-id account-id :input-uid input-uid} [[:account-id :string] [:input-uid :string]])
    #(str (inputs-path account-id) "/" input-uid)))
 
 (defn outputs-path
   "REST path for live outputs under an input. JVM: kotoba `outputs-path`."
   [account-id input-uid]
   (try-oracle
-   #(o 'outputs-path [(str account-id) (str input-uid)])
+   #(o-record 'outputs-path {:account-id account-id :input-uid input-uid} [[:account-id :string] [:input-uid :string]])
    #(str (live-input-path account-id input-uid) "/outputs")))
 
 (defn create-live-input-request
@@ -277,12 +284,9 @@
    JVM: kotoba `live-input-summary`."
   [{:keys [uid name whip-url rtmps-url rtmps-stream-key]}]
   (try-oracle
-   #(o 'live-input-summary
-       [(str (or uid ""))
-        (str (or name ""))
-        (str (or whip-url "-"))
-        (str (or rtmps-url "-"))
-        (str (or rtmps-stream-key ""))])
+   #(o-record 'live-input-summary
+                        {:uid uid :name name :whip-url whip-url :rtmps-url rtmps-url :rtmps-stream-key rtmps-stream-key}
+                        [[:uid :string] [:name :string] [:whip-url :string] [:rtmps-url :string] [:rtmps-stream-key :string]])
    #(str "live-input " uid
          (when name (str " (" name ")"))
          " whip=" (or whip-url "-")
