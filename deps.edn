@@ -4,7 +4,7 @@
         ;; KIR (resources/cloudflare/oracle/*.kir.edn). Compiler stays :test-only.
         io.github.kotoba-lang/kotoba-kir
         {:git/url "https://github.com/kotoba-lang/kotoba-kir.git"
-         :git/sha "767f2f2fcb6c2c8f9288b24bef24caedb0486333"}}
+         :git/sha "6d08e3cffa09c003f8dbcdfaee964c4a1ea021ad"}}
  :aliases
  {:test {:extra-paths ["test"]
          ;; kotoba-lang/compiler is TEST-ONLY for the W6 pure-request oracle
@@ -18,7 +18,7 @@
                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}
                       io.github.kotoba-lang/compiler
                       {:git/url "https://github.com/kotoba-lang/compiler.git"
-                       :git/sha "98b56bdb6886236281b634cc3409088ed2fe72a4"}}
+                       :git/sha "b0095427fdc1b52153b285e6443591f2196c20a6"}}
          :main-opts ["-m" "cognitect.test-runner"]
          :exec-fn cognitect.test-runner.api/test}
 
@@ -30,8 +30,12 @@
                  :git/sha "34415ce9bf2b8d37d5bc8259ba7e00f5d091eb44"}}
                :extra-deps {io.github.kotoba-lang/compiler
                             {:git/url "https://github.com/kotoba-lang/compiler.git"
-                             :git/sha "98b56bdb6886236281b634cc3409088ed2fe72a4"}}
+                             :git/sha "b0095427fdc1b52153b285e6443591f2196c20a6"}}
                :main-opts ["-m" "cloudflare.kotoba-oracle-gen"]}
+
+  ;; Regenerate the cross-runtime oracle case table (test/cloudflare/oracle_cases.edn).
+  :oracle-cases-gen {:extra-paths ["test"]
+                     :main-opts ["-m" "cloudflare.oracle-cases-gen"]}
 
   ;; clj-kondo as a Clojars lib (no Homebrew/system install needed).
   :lint {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.11.14"}}
