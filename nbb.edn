@@ -1,7 +1,18 @@
-;; nbb config for cljs dual-source smoke of product-shell pure helpers.
-;; W6 cljs oracle load: paths include resources/ for KIR artifacts;
-;; kotoba-kir executes precompiled pure-request documents.
-{:paths ["src" "resources"]
+;; nbb config for the ClojureScript side of this repo.
+;;
+;; Runs the cljs oracle gate (ADR 0019) — the suite that executes the shipped
+;; KIR on the runtime this library is actually consumed from:
+;;
+;;   nbb test/cloudflare/oracle_cljs_gate.cljs
+;;
+;; paths: src/ for the product shells, resources/ for the KIR artifacts,
+;; test/ for the gate and the case table shared with the JVM suite.
+;;
+;; The kotoba-kir pin MUST stay in step with deps.edn. When they drifted apart
+;; the cljs half executed an interpreter whose bounds guard rejected the
+;; js/BigInt a cljs :i64 is, and 62 of 220 exported calls threw while the JVM
+;; suite stayed green.
+{:paths ["src" "resources" "test"]
  :deps {io.github.kotoba-lang/kotoba-kir
         {:git/url "https://github.com/kotoba-lang/kotoba-kir.git"
-         :git/sha "7ad08c4e3e47c8009198d0e77e86bf8c9981cfb7"}}}
+         :git/sha "6d08e3cffa09c003f8dbcdfaee964c4a1ea021ad"}}}
