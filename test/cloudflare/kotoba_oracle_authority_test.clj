@@ -165,13 +165,25 @@
     (is (= (ir/execute ap 'report-ok? [0])
            (oracle/call :analytics-parse 'report-ok? [0])))))
 
-(deftest precompiled-client-kir-does-not-drift
-  (let [live (:kir (compiler/compile-source (slurp "kotoba/client_core.kotoba")
-                                            :wasm32-kotoba-v1 {}))
-        shipped (edn/read-string
-                 (slurp (io/resource "cloudflare/oracle/client_core.kir.edn")))]
-    (is (= live shipped)
-        "client_core KIR drift — run: clojure -M:oracle-gen")))
+(deftest precompiled-kir-does-not-drift
+  ;; Every kotoba/*_core.kotoba, not only client_core. Production reads the
+  ;; SHIPPED artifact, so a core edited without `clojure -M:oracle-gen` leaves
+  ;; the running decision on the old KIR. Whole-artifact equality is the only
+  ;; check that sees that; the sampled `oracle/call` comparisons above cover
+  ;; one or two exports each, and workers_path/zones_path/logpush_path had no
+  ;; shipped-vs-source comparison at all.
+  (let [artifacts (gen/discover-artifacts)]
+    (is (= (count (oracle/catalog-ids)) (count artifacts))
+        "every *_core.kotoba ships exactly one oracle artifact")
+    (doseq [{:strs [source out]} artifacts]
+      (let [path (str/replace out #"^resources/" "")
+            res (io/resource path)]
+        (is (some? res) (str "no shipped KIR on the classpath for " source))
+        (when res
+          (let [live (:kir (compiler/compile-source (slurp source)
+                                                    :wasm32-kotoba-v1 {}))]
+            (is (= live (edn/read-string (slurp res)))
+                (str source " KIR drift — run: clojure -M:oracle-gen"))))))))
 
 (deftest gen-compile-kir-roundtrip
   (let [kir (gen/compile-kir "kotoba/client_core.kotoba")]
