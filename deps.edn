@@ -7,7 +7,7 @@
          :git/sha "6d08e3cffa09c003f8dbcdfaee964c4a1ea021ad"}}
  :aliases
  {:test {:extra-paths ["test"]
-         ;; kotoba-lang/compiler is TEST-ONLY for the W6 pure-request oracle
+         ;; kotoba-lang/amu is TEST-ONLY for the W6 pure-request oracle
          ;; parity gate + product-shell artifact gen. Override abi to the pin
          ;; compiler expects so component/wit loads cleanly in the test JVM.
          :override-deps
@@ -23,8 +23,8 @@
                        :git/sha "250f4dafa5f5c7fb3109703496a52866e2a62dcd"}
                       io.github.cognitect-labs/test-runner
                       {:git/tag "v0.5.1" :git/sha "dfb30dd"}
-                      io.github.kotoba-lang/compiler
-                      {:git/url "https://github.com/kotoba-lang/compiler.git"
+                      io.github.kotoba-lang/amu
+                      {:git/url "https://github.com/kotoba-lang/amu.git"
                        :git/sha "b0095427fdc1b52153b285e6443591f2196c20a6"}}
          :main-opts ["-m" "cognitect.test-runner"]
          :exec-fn cognitect.test-runner.api/test}
@@ -38,8 +38,8 @@
                :extra-deps {io.github.kotoba-lang/edn
                             {:git/url "https://github.com/kotoba-lang/edn.git"
                              :git/sha "250f4dafa5f5c7fb3109703496a52866e2a62dcd"}
-                            io.github.kotoba-lang/compiler
-                            {:git/url "https://github.com/kotoba-lang/compiler.git"
+                            io.github.kotoba-lang/amu
+                            {:git/url "https://github.com/kotoba-lang/amu.git"
                              :git/sha "b0095427fdc1b52153b285e6443591f2196c20a6"}}
                :main-opts ["-m" "cloudflare.kotoba-oracle-gen"]}
 
