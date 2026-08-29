@@ -19,7 +19,7 @@
   Live helpers are JVM-only thin wrappers around `client/rest!` + plans."
   (:require [clojure.string :as str]
             #?(:clj [cloudflare.client :as client])
-            #?(:clj [clojure.data.json :as json])
+            #?(:clj [json.data-json :as json])
             [cloudflare.kotoba.oracle :as oracle])
   #?(:clj (:import (java.security MessageDigest)
                    (java.util Base64))))

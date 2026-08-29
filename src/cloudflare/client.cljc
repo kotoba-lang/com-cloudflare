@@ -24,7 +24,7 @@
   set-resource-loader!) before requiring this ns (ADR-0016).
   HTTP/JSON/getenv stay host."
   (:require [clojure.string :as str]
-            #?(:clj [clojure.data.json :as json])
+            #?(:clj [json.data-json :as json])
             [cloudflare.kotoba.oracle :as oracle]))
 
 (def ^:private oid :client)
