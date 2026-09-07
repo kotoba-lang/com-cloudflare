@@ -88,7 +88,7 @@
   ;; `clojure -Spath`, so nbb.edn stays a real, self-contained config.
   (let [sha (fn [f k]
               (get-in (edn/read-string (slurp f))
-                      [k 'io.github.kotoba-lang/kotoba-kir :git/sha]))
+                      [k 'io.github.kotoba-lang/osaho :git/sha]))
         jvm (sha "deps.edn" :deps)
         cljs (sha "nbb.edn" :deps)]
     (is (some? jvm) "deps.edn pins kotoba-kir")
