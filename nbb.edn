@@ -13,6 +13,6 @@
 ;; js/BigInt a cljs :i64 is, and 62 of 220 exported calls threw while the JVM
 ;; suite stayed green.
 {:paths ["src" "resources" "test"]
- :deps {io.github.kotoba-lang/kotoba-kir
-        {:git/url "https://github.com/kotoba-lang/kotoba-kir.git"
+ :deps {io.github.kotoba-lang/osaho
+        {:git/url "https://github.com/kotoba-lang/osaho.git"
          :git/sha "6d08e3cffa09c003f8dbcdfaee964c4a1ea021ad"}}}
