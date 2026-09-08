@@ -23,7 +23,7 @@
   must preload shipped KIR (resources/ via nbb cwd, register-kir!, or
   set-resource-loader!) before requiring this ns (ADR-0016).
   HTTP/JSON/getenv stay host."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             #?(:clj [json.data-json :as json])
             [cloudflare.kotoba.oracle :as oracle]))
 

@@ -2,7 +2,7 @@
 ;; vs kotoba/workers_path_core.kotoba.
 
 (ns cloudflare.workers-path-kotoba-parity-test
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [cloudflare.client :as client]
             [kotoba.compiler.core :as compiler]

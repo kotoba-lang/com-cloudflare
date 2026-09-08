@@ -2,7 +2,7 @@
 ;; vs kotoba/zones_path_core.kotoba.
 
 (ns cloudflare.zones-path-kotoba-parity-test
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [cloudflare.client :as client]
             [cloudflare.zones :as zones]

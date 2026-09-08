@@ -2,7 +2,7 @@
 ;; parse-daily-report pure folds (cloudflare.analytics).
 
 (ns cloudflare.analytics-parse-kotoba-parity-test
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [cloudflare.analytics :as analytics]
             [cloudflare.client :as client]

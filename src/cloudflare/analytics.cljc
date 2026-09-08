@@ -18,7 +18,7 @@
     first consumer hit, not a bug -- see gftdcojp/cloud-itonami ADR-0010's
     app.itonami.cloud discovery), so omit `host` to see the whole zone
     first before assuming a host-filtered zero means something is broken."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [cloudflare.client :as client]
             [cloudflare.kotoba.oracle :as oracle]))
 
