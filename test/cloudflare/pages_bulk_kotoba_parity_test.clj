@@ -2,7 +2,7 @@
 ;; vs kotoba/pages_bulk_core.kotoba.
 
 (ns cloudflare.pages-bulk-kotoba-parity-test
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is]]
             [cloudflare.deploy :as deploy]
             [kotoba.compiler.core :as compiler]

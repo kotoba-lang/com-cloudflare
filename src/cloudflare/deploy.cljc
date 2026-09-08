@@ -17,7 +17,7 @@
   | `wrangler-pages-deploy-argv` | host process-kit argv (optional ops shell) |
 
   Live helpers are JVM-only thin wrappers around `client/rest!` + plans."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             #?(:clj [cloudflare.client :as client])
             #?(:clj [json.data-json :as json])
             [cloudflare.kotoba.oracle :as oracle])

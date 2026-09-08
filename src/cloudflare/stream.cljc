@@ -22,7 +22,7 @@
   it can publish as that channel. Keeping the request shaping pure lets the
   script that actually touches the key run wherever the key already lives,
   instead of forcing a JVM into that path."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [cloudflare.client :as client]
             [cloudflare.kotoba.oracle :as oracle]))
 

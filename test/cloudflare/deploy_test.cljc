@@ -1,5 +1,5 @@
 (ns cloudflare.deploy-test
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [cloudflare.deploy :as deploy]))
 

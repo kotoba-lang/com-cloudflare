@@ -2,7 +2,7 @@
 ;; vs kotoba/analytics_core.kotoba.
 
 (ns cloudflare.analytics-kotoba-parity-test
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [clojure.test :refer [deftest is testing]]
             [cloudflare.analytics :as analytics]
             [kotoba.compiler.core :as compiler]
