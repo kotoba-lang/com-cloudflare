@@ -1,6 +1,6 @@
 ;; ClojureScript gate for the shipped oracle artifacts. Run from the repo root:
 ;;
-;;   nbb test/cloudflare/oracle_cljs_gate.cljs
+;;   nbb test/cloudflare/oracle_cljs_gate.cljk
 ;;
 ;; This is the check whose absence let a broken deploy-runtime path ship
 ;; (ADR 0019). com-cloudflare exists to be called from a JavaScript runtime,
@@ -57,7 +57,7 @@
       (when (seq gaps)
         (fail! (str (count gaps) " shipped export(s) have no case"))
         (doseq [g gaps] (println "   uncovered:" (pr-str g)))
-        (println "  fix: add args in test/cloudflare/oracle_cases_gen.clj,"
+        (println "  fix: add args in test/cloudflare/oracle_cases_gen.cljk,"
                  "then `clojure -M:oracle-cases-gen`")))
 
     (let [fails (cases/failures table)

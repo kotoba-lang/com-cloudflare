@@ -6,7 +6,7 @@
 
 ;; W6 cloudflare-pure-request-v1 — pure REST path construction for Logpush.
 ;; create/delete *! HTTP and destination conf stay host.
-;; Parity: test/cloudflare/logpush_path_kotoba_parity_test.clj
+;; Parity: test/cloudflare/logpush_path_kotoba_parity_test.cljk
 
 (defn datasets-path [zone-id :string] :string
   (string-concat "/zones/" (string-concat zone-id "/logpush/datasets")))

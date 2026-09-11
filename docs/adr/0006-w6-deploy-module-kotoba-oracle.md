@@ -28,7 +28,7 @@ Extend `kotoba/deploy_core.kotoba`:
 
 ## Evidence
 
-- `test/cloudflare/deploy_kotoba_parity_test.clj`
+- `test/cloudflare/deploy_kotoba_parity_test.cljk`
 
 ## Related
 

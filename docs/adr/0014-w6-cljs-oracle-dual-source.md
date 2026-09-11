@@ -29,7 +29,7 @@ Ship `nbb.edn` for smoke (kotoba-kir + resources/).
 ## Evidence
 
 - JVM suite green (authority + parity + unit)
-- `test/cloudflare/kotoba_oracle_cljs_load_test.clj`
+- `test/cloudflare/kotoba_oracle_cljs_load_test.cljk`
 - nbb smoke: ready? + bearer-auth/path helpers
 
 ## Related

@@ -30,8 +30,8 @@ Port pure string cores:
 
 ## Evidence
 
-- `test/cloudflare/analytics_kotoba_parity_test.clj`
-- `test/cloudflare/workers_path_kotoba_parity_test.clj`
+- `test/cloudflare/analytics_kotoba_parity_test.cljk`
+- `test/cloudflare/workers_path_kotoba_parity_test.cljk`
 
 ## Related
 

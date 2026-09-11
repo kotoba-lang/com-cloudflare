@@ -92,11 +92,11 @@ only the bug of the day.
   the guest genuinely accepts, so a raised exception always means a defect and
   never a legitimate guest trap); expectations are derived by executing them on
   the JVM and checked in.
-- `test/cloudflare/oracle_cases.cljc` — the portable table reader, arg decoder
+- `test/cloudflare/oracle_cases.cljk` — the portable table reader, arg decoder
   and result normalizer (a guest `:i64` is a `long` here and a `BigInt` there,
   so both collapse to a number before comparison).
-- `test/cloudflare/oracle_cljs_gate.cljs` — `nbb test/cloudflare/oracle_cljs_gate.cljs`.
-- `test/cloudflare/oracle_cases_test.clj` — the same table on the JVM.
+- `test/cloudflare/oracle_cljs_gate.cljk` — `nbb test/cloudflare/oracle_cljs_gate.cljk`.
+- `test/cloudflare/oracle_cases_test.cljk` — the same table on the JVM.
 
 Because both runtimes execute the *same* table through `oracle/call` — the
 production seam, loader and ABI projection included — a JVM/cljs divergence is
@@ -139,7 +139,7 @@ amount of strengthening the JVM suite would have found it, because on the JVM
 `(long n)` and `n` are the same value.
 
 Suites at the landed pins: `clojure -M:test` — 98 tests, 564 assertions, 0
-failures, 0 errors (was 94/537). `nbb test/cloudflare/oracle_cljs_gate.cljs` —
+failures, 0 errors (was 94/537). `nbb test/cloudflare/oracle_cljs_gate.cljk` —
 220 cases, 117 exports, exit 0.
 
 `precompiled-kir-does-not-drift` (extended to all nine artifacts in `4975784`)

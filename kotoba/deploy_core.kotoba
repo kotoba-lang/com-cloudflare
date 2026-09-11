@@ -31,7 +31,7 @@
 ;; Plan maps / module map assembly / JSON metadata / *! HTTP stay cljc.
 ;; validate-*: empty string ≡ cljc nil (ok); else bare error tag (no :deploy/ ns).
 ;; Charset mirrors re-matches policies in deploy.cljc.
-;; Parity: test/cloudflare/deploy_kotoba_parity_test.clj
+;; Parity: test/cloudflare/deploy_kotoba_parity_test.cljk
 
 (defn max-account-id [] :i64 64)
 (defn max-script-name [] :i64 64)

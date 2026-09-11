@@ -18,7 +18,7 @@
 ;; W6 Pages bulk Direct Upload oracle — pure path/hash helpers from
 ;; cloudflare.deploy (ADR 0007). Manifest assembly / base64 / *! HTTP stay cljc.
 ;; validate-asset-path: empty string ≡ cljc nil (ok); else bare error tag.
-;; Parity: test/cloudflare/pages_bulk_kotoba_parity_test.clj
+;; Parity: test/cloudflare/pages_bulk_kotoba_parity_test.cljk
 
 (defn max-pages-assets [] :i64 512)
 (defn max-asset-path [] :i64 512)

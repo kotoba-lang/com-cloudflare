@@ -35,7 +35,7 @@ Port pure query construction + match to `kotoba/zones_path_core.kotoba`:
 
 ## Evidence
 
-- `test/cloudflare/zones_path_kotoba_parity_test.clj`
+- `test/cloudflare/zones_path_kotoba_parity_test.cljk`
 
 ## Related
 

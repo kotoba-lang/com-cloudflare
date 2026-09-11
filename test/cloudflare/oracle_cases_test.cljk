@@ -1,6 +1,6 @@
 ;; JVM half of the cross-runtime oracle gate.
 ;;
-;; The cljs half is test/cloudflare/oracle_cljs_gate.cljs, run by nbb. Both
+;; The cljs half is test/cloudflare/oracle_cljs_gate.cljk, run by nbb. Both
 ;; execute test/cloudflare/oracle_cases.edn through `oracle/call`. This ns
 ;; keeps the table honest on the JVM (coverage + expectations); the nbb gate
 ;; proves ClojureScript agrees. Neither alone is sufficient — that asymmetry
@@ -17,7 +17,7 @@
   (let [{:keys [cases]} @table]
     (is (empty? (cases/missing-coverage cases))
         (str "shipped exports with no case — add them to "
-             "test/cloudflare/oracle_cases_gen.clj and rerun "
+             "test/cloudflare/oracle_cases_gen.cljk and rerun "
              "`clojure -M:oracle-cases-gen`: "
              (pr-str (cases/missing-coverage cases))))
     (is (= 117 (count (cases/shipped-exports)))

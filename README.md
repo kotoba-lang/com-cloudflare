@@ -122,7 +122,7 @@ Two suites, and **both are required** -- see ADR 0019.
 
 ```sh
 clojure -M:test                                  # JVM
-nbb test/cloudflare/oracle_cljs_gate.cljs        # ClojureScript (from repo root)
+nbb test/cloudflare/oracle_cljs_gate.cljk        # ClojureScript (from repo root)
 ```
 
 Stubbed `:http-fn` throughout -- no `CLOUDFLARE_API_TOKEN` or live account
@@ -142,7 +142,7 @@ exception, on a result that differs from the JVM, or on any export that has no
 case at all. The case table is shared with the JVM suite
 (`cloudflare.oracle-cases-test`), so the two runtimes cannot silently diverge.
 
-To change the table, edit the arguments in `test/cloudflare/oracle_cases_gen.clj`
+To change the table, edit the arguments in `test/cloudflare/oracle_cases_gen.cljk`
 and regenerate:
 
 ```sh
