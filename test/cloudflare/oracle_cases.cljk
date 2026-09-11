@@ -15,7 +15,7 @@
 ;; The nine shipped artifacts had no cljs execution gate at all.
 ;;
 ;; The fix is one table executed on BOTH runtimes:
-;;   - JVM: cloudflare.oracle-cases-test (runs under `clojure -M:test`)
+;;   - JVM: cloudflare.oracle-cases-test (runs under `kbb -M:test`)
 ;;   - cljs: test/cloudflare/oracle_cljs_gate.cljk (runs under `nbb`)
 ;; Divergence between the two runtimes is therefore a test failure, not a
 ;; production incident.

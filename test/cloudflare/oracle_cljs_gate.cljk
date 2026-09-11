@@ -1,6 +1,6 @@
 ;; ClojureScript gate for the shipped oracle artifacts. Run from the repo root:
 ;;
-;;   nbb test/cloudflare/oracle_cljs_gate.cljk
+;;   kbb --backend sci test/cloudflare/oracle_cljs_gate.cljk
 ;;
 ;; This is the check whose absence let a broken deploy-runtime path ship
 ;; (ADR 0019). com-cloudflare exists to be called from a JavaScript runtime,
@@ -19,7 +19,7 @@
 ;;      calling through the seam, which is why this gate does.
 ;;
 ;; Neither is visible from the JVM: removing the mode-2 conversion leaves
-;; `clojure -M:test` at 0 failures and fails 6 cases here.
+;; `kbb -M:test` at 0 failures and fails 6 cases here.
 ;;
 ;; The gate executes every case in test/cloudflare/oracle_cases.edn through
 ;; `cloudflare.kotoba.oracle/call` — the production seam, loader and ABI
@@ -58,7 +58,7 @@
         (fail! (str (count gaps) " shipped export(s) have no case"))
         (doseq [g gaps] (println "   uncovered:" (pr-str g)))
         (println "  fix: add args in test/cloudflare/oracle_cases_gen.cljk,"
-                 "then `clojure -M:oracle-cases-gen`")))
+                 "then `kbb -M:oracle-cases-gen`")))
 
     (let [fails (cases/failures table)
           threw (filter #(= :threw (:kind %)) fails)

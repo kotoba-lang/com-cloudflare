@@ -36,7 +36,7 @@ Catalog also ships (artifact only; host wiring incremental):
 ### Regeneration
 
 ```bash
-clojure -M:test -m cloudflare.kotoba-oracle-gen
+kbb -M:test -m cloudflare.kotoba-oracle-gen
 ```
 
 ## Evidence

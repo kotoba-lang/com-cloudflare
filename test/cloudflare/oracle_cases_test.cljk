@@ -18,7 +18,7 @@
     (is (empty? (cases/missing-coverage cases))
         (str "shipped exports with no case — add them to "
              "test/cloudflare/oracle_cases_gen.cljk and rerun "
-             "`clojure -M:oracle-cases-gen`: "
+             "`kbb -M:oracle-cases-gen`: "
              (pr-str (cases/missing-coverage cases))))
     (is (= 117 (count (cases/shipped-exports)))
         "shipped export count changed; regenerate the case table")
@@ -85,7 +85,7 @@
   ;; apart, the cljs half executed a different interpreter than anything the JVM
   ;; suite ever ran — which is how a fixed guard upstream stayed unfixed here.
   ;; Equality is checked rather than resolving nbb's interpreter through
-  ;; `clojure -Spath`, so nbb.edn stays a real, self-contained config.
+  ;; `kbb -Spath`, so nbb.edn stays a real, self-contained config.
   (let [sha (fn [f k]
               (get-in (edn/read-string (slurp f))
                       [k 'io.github.kotoba-lang/osaho :git/sha]))
