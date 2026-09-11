@@ -18,7 +18,7 @@ Add `kotoba/pages_bulk_core.kotoba` with:
 - `content-type-for-path`
 - `missing-hash?` / `hash-known?` (arity-limited membership probe)
 
-Parity gate: `test/cloudflare/pages_bulk_kotoba_parity_test.clj`.
+Parity gate: `test/cloudflare/pages_bulk_kotoba_parity_test.cljk`.
 
 ## Related
 

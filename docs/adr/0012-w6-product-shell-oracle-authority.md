@@ -41,9 +41,9 @@ clojure -M:test -m cloudflare.kotoba-oracle-gen
 
 ## Evidence
 
-- `src/cloudflare/kotoba/oracle.cljc`
+- `src/cloudflare/kotoba/oracle.cljk`
 - `resources/cloudflare/oracle/*.kir.edn`
-- `test/cloudflare/kotoba_oracle_authority_test.clj`
+- `test/cloudflare/kotoba_oracle_authority_test.cljk`
 - existing client/path parity tests
 
 ## Related

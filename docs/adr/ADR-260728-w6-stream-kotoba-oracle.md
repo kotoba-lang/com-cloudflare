@@ -22,7 +22,7 @@ Port the pure string core of `cloudflare.stream` to `kotoba/stream_core.kotoba`:
 
 ## Evidence
 
-- `test/cloudflare/stream_kotoba_parity_test.clj`
+- `test/cloudflare/stream_kotoba_parity_test.cljk`
 - Equality against `cloudflare.stream` offline unit corpus
 
 ## Related

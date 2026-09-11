@@ -19,7 +19,7 @@
 ;; Request map builders and *! HTTP stay cljc. No capabilities.
 ;; validate-flags bits: 1 missing-url | 2 bad-scheme | 4 missing-stream-key
 ;;   | 8 whitespace-in-key | 16 key-embedded-in-url (same order as cljc cond->).
-;; Parity: test/cloudflare/stream_kotoba_parity_test.clj
+;; Parity: test/cloudflare/stream_kotoba_parity_test.cljk
 
 (defn api-base [] :string
   "https://api.cloudflare.com/client/v4")

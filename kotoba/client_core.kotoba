@@ -12,7 +12,7 @@
 
 ;; W6 pure-request oracle — cloudflare.client constants + URL/auth helpers.
 ;; jvm-http-fn / rest! / graphql! / getenv stay host.
-;; Parity: test/cloudflare/client_kotoba_parity_test.clj
+;; Parity: test/cloudflare/client_kotoba_parity_test.cljk
 
 (defn api-base [] :string
   "https://api.cloudflare.com/client/v4")

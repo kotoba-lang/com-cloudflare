@@ -4,7 +4,7 @@
 ;; W6 cloudflare-pure-request-v1 — GraphQL query text core of cloudflare.analytics.
 ;; Tally/sum folds: kotoba/analytics_parse_core.kotoba (ADR 0009).
 ;; JSON row projection + *! / iso-date clocks stay host.
-;; Parity: test/cloudflare/analytics_kotoba_parity_test.clj
+;; Parity: test/cloudflare/analytics_kotoba_parity_test.cljk
 
 (defn daily-query [] :string
   "query DailyTraffic($zoneTag: String!, $since: String!, $until: String!) { viewer { zones(filter: {zoneTag: $zoneTag}) { httpRequests1dGroups(limit: 31, filter: {date_geq: $since, date_leq: $until}) { sum { requests pageViews bytes } uniq { uniques } dimensions { date } } } } }")

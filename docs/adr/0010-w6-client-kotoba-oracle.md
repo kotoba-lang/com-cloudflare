@@ -30,4 +30,4 @@ Port pure scalars to `kotoba/client_core.kotoba`:
 
 ## Evidence
 
-- `test/cloudflare/client_kotoba_parity_test.clj`
+- `test/cloudflare/client_kotoba_parity_test.cljk`

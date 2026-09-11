@@ -22,7 +22,7 @@
 ;; Host projects response rows (JSON→fields); guest folds tallies + totals.
 ;; Full path-report-rows vector assembly and GraphQL transport stay cljc.
 ;; T5.2: multi-arg pure folded into single guest records.
-;; Parity: test/cloudflare/analytics_parse_kotoba_parity_test.clj
+;; Parity: test/cloudflare/analytics_parse_kotoba_parity_test.cljk
 
 (defn empty-string-tally [] [:map :string :i64]
   (typed-map-new [:map :string :i64]))

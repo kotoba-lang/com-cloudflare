@@ -13,8 +13,8 @@ HTTP create/delete and map parse of live inputs remain cljc/host.
 
 ## Evidence
 
-- `test/cloudflare/logpush_path_kotoba_parity_test.clj`
-- `test/cloudflare/stream_summary_kotoba_parity_test.clj`
+- `test/cloudflare/logpush_path_kotoba_parity_test.cljk`
+- `test/cloudflare/stream_summary_kotoba_parity_test.cljk`
 
 ## Related
 

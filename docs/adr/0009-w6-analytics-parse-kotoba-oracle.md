@@ -31,7 +31,7 @@ Host still parses GraphQL JSON → row fields; guest owns pure tally/sum folds.
 
 ## Evidence
 
-- `test/cloudflare/analytics_parse_kotoba_parity_test.clj`
+- `test/cloudflare/analytics_parse_kotoba_parity_test.cljk`
 
 ## Related
 
