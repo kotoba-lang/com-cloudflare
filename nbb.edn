@@ -3,7 +3,7 @@
 ;; Runs the cljs oracle gate (ADR 0019) — the suite that executes the shipped
 ;; KIR on the runtime this library is actually consumed from:
 ;;
-;;   nbb test/cloudflare/oracle_cljs_gate.cljk
+;;   kbb --backend sci test/cloudflare/oracle_cljs_gate.cljk
 ;;
 ;; paths: src/ for the product shells, resources/ for the KIR artifacts,
 ;; test/ for the gate and the case table shared with the JVM suite.

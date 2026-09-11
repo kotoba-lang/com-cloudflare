@@ -167,7 +167,7 @@
 
 (deftest precompiled-kir-does-not-drift
   ;; Every kotoba/*_core.kotoba, not only client_core. Production reads the
-  ;; SHIPPED artifact, so a core edited without `clojure -M:oracle-gen` leaves
+  ;; SHIPPED artifact, so a core edited without `kbb -M:oracle-gen` leaves
   ;; the running decision on the old KIR. Whole-artifact equality is the only
   ;; check that sees that; the sampled `oracle/call` comparisons above cover
   ;; one or two exports each, and workers_path/zones_path/logpush_path had no
@@ -183,7 +183,7 @@
           (let [live (:kir (compiler/compile-source (slurp source)
                                                     :wasm32-kotoba-v1 {}))]
             (is (= live (edn/read-string (slurp res)))
-                (str source " KIR drift — run: clojure -M:oracle-gen"))))))))
+                (str source " KIR drift — run: kbb -M:oracle-gen"))))))))
 
 (deftest gen-compile-kir-roundtrip
   (let [kir (gen/compile-kir "kotoba/client_core.kotoba")]

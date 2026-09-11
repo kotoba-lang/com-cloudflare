@@ -34,4 +34,4 @@ Host call sites use `oracle/record` + `[[:in :raw]]`.
 ## Evidence
 
 - KIR regenerated for all 9 product-shell cores
-- `clojure -M:test` 94 tests / 519 assertions green
+- `kbb -M:test` 94 tests / 519 assertions green

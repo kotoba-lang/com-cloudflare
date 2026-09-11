@@ -121,8 +121,8 @@ there.
 Two suites, and **both are required** -- see ADR 0019.
 
 ```sh
-clojure -M:test                                  # JVM
-nbb test/cloudflare/oracle_cljs_gate.cljk        # ClojureScript (from repo root)
+kbb -M:test                                  # JVM
+kbb --backend sci test/cloudflare/oracle_cljs_gate.cljk        # ClojureScript (from repo root)
 ```
 
 Stubbed `:http-fn` throughout -- no `CLOUDFLARE_API_TOKEN` or live account
@@ -133,7 +133,7 @@ The public API delegates its pure decisions to precompiled Kotoba KIR
 JavaScript. **A green JVM run is not evidence about ClojureScript**: until
 2026-08-12 the shipped artifacts threw `string substring indexes are out of
 bounds` on nbb for 40+ exports -- the whole deploy-validation path among them --
-while `clojure -M:test` stayed green, because the kir interpreter's bounds guard
+while `kbb -M:test` stayed green, because the kir interpreter's bounds guard
 rejected the `js/BigInt` that a cljs `:i64` is.
 
 The cljs gate executes 220 cases covering **every export of every shipped
@@ -146,7 +146,7 @@ To change the table, edit the arguments in `test/cloudflare/oracle_cases_gen.clj
 and regenerate:
 
 ```sh
-clojure -M:oracle-cases-gen
+kbb -M:oracle-cases-gen
 ```
 
 Expectations are derived by running the cases on the JVM, so read the diff --

@@ -54,7 +54,7 @@ the guard with `bounded-host-byte-offset`, which converts a BigInt offset.
 
 Every gate this repo had — the parity suites, `precompiled-kir-does-not-drift`,
 even `kotoba_oracle_cljs_load_test.clj`, which exercises the *cljs load surface*
-from the JVM — runs on the JVM. **A green `clojure -M:test` is not evidence
+from the JVM — runs on the JVM. **A green `kbb -M:test` is not evidence
 about ClojureScript**, and this repo's whole reason to exist is a runtime that is
 JavaScript. 62 of 220 representative calls across 40+ exports threw, including
 the entire deploy-validation path (`validate-account-id`, `validate-script-name`,
@@ -95,7 +95,7 @@ only the bug of the day.
 - `test/cloudflare/oracle_cases.cljk` — the portable table reader, arg decoder
   and result normalizer (a guest `:i64` is a `long` here and a `BigInt` there,
   so both collapse to a number before comparison).
-- `test/cloudflare/oracle_cljs_gate.cljk` — `nbb test/cloudflare/oracle_cljs_gate.cljk`.
+- `test/cloudflare/oracle_cljs_gate.cljk` — `kbb --backend sci test/cloudflare/oracle_cljs_gate.cljk`.
 - `test/cloudflare/oracle_cases_test.cljk` — the same table on the JVM.
 
 Because both runtimes execute the *same* table through `oracle/call` — the
@@ -115,7 +115,7 @@ executing an interpreter no JVM run ever touched.
 `kir-pin-agrees-between-runtimes` fails when they differ.
 
 `kotoba-lang/calendar`'s `scripts/cljs-boundary-check.cljs` instead resolves the
-interpreter through `clojure -Spath`, so drift is impossible by construction.
+interpreter through `kbb -Spath`, so drift is impossible by construction.
 That is the stronger property and worth taking if a third pin ever appears; it
 was not taken here because it makes `nbb.edn` a decoy — it would still declare a
 `kotoba-kir` dep that nothing uses, and consumers of this library run nbb with
@@ -129,7 +129,7 @@ Mutation-tested; the gate was shown to fail before it was shown to pass.
 |---|---|
 | pins reverted to `767f2f2f`/`7ad08c4e` (mode 1) | cljs gate exit 1, **62 of 220 cases threw** `string substring indexes are out of bounds` |
 | pins advanced (the fix) | cljs gate exit 0, 220/220 match the JVM |
-| `oracle/record`'s `(= field-type :i64) (as-i64 v)` → `v` (mode 2) | cljs gate exit 1, **6 cases threw** `value is not a signed i64` — while `clojure -M:test` reported **98 tests, 564 assertions, 0 failures** |
+| `oracle/record`'s `(= field-type :i64) (as-i64 v)` → `v` (mode 2) | cljs gate exit 1, **6 cases threw** `value is not a signed i64` — while `kbb -M:test` reported **98 tests, 564 assertions, 0 failures** |
 | one shipped artifact hand-edited (`rtmps://live.twitch.tv/app` → `TAMPERED`) | cljs gate exit 1 `:mismatch`; JVM `precompiled-kir-does-not-drift` also fails |
 | all cases for `:stream/redact-key` deleted | cljs gate exit 1, `uncovered: [:stream redact-key]` |
 
@@ -138,8 +138,8 @@ mutation is a clean sweep on the JVM and six failures on ClojureScript. No
 amount of strengthening the JVM suite would have found it, because on the JVM
 `(long n)` and `n` are the same value.
 
-Suites at the landed pins: `clojure -M:test` — 98 tests, 564 assertions, 0
-failures, 0 errors (was 94/537). `nbb test/cloudflare/oracle_cljs_gate.cljk` —
+Suites at the landed pins: `kbb -M:test` — 98 tests, 564 assertions, 0
+failures, 0 errors (was 94/537). `kbb --backend sci test/cloudflare/oracle_cljs_gate.cljk` —
 220 cases, 117 exports, exit 0.
 
 `precompiled-kir-does-not-drift` (extended to all nine artifacts in `4975784`)
@@ -148,7 +148,7 @@ still holds, and still fails on a stale artifact, as the table shows.
 ## Consequences
 
 - `nbb.edn` `:paths` gains `"test"` so the gate and the shared table resolve.
-- Regenerating the case table (`clojure -M:oracle-cases-gen`) rewrites the
+- Regenerating the case table (`kbb -M:oracle-cases-gen`) rewrites the
   expectations from the JVM. **Read that diff** — a changed expectation is a
   changed decision, not a refresh.
 - The cljs gate is not yet wired into the murakumo fleet CI (`scripts/fleet-ci/

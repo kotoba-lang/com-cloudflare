@@ -1,7 +1,7 @@
 ;; cloudflare.kotoba-oracle-gen — regenerate precompiled KIR product-shell artifacts.
 ;;
 ;; Run under :test (needs kotoba.compiler):
-;;   clojure -M:test -m cloudflare.kotoba-oracle-gen
+;;   kbb -M:test -m cloudflare.kotoba-oracle-gen
 ;;
 ;; Discovers every kotoba/*_core.kotoba and writes
 ;; resources/cloudflare/oracle/<name>.kir.edn using the same compile-source
