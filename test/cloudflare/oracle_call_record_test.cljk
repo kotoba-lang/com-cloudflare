@@ -1,6 +1,6 @@
 (ns cloudflare.oracle-call-record-test
   "T5.2: structural host map → guest arg projection + call-record (com-cloudflare)."
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [cloudflare.kotoba.oracle :as oracle]
             [cloudflare.client :as client]
             [cloudflare.workers :as workers]

@@ -3,7 +3,7 @@
 
 (ns cloudflare.client-kotoba-parity-test
   (:require [kotoba.lang.text :as str]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [cloudflare.client :as client]
             [kotoba.compiler.core :as compiler]
             [kotoba.kir :as ir]))

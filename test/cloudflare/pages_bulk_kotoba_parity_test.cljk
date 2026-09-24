@@ -3,7 +3,7 @@
 
 (ns cloudflare.pages-bulk-kotoba-parity-test
   (:require [kotoba.lang.text :as str]
-            [clojure.test :refer [deftest is]]
+            [kotoba.test :refer [deftest is]]
             [cloudflare.deploy :as deploy]
             [kotoba.compiler.core :as compiler]
             [kotoba.kir :as ir]))

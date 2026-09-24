@@ -1,5 +1,5 @@
 (ns cloudflare.client-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [cloudflare.client :as client]))
 
 (defn- stub-http-fn [status body]

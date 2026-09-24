@@ -13,6 +13,10 @@
 ;; js/BigInt a cljs :i64 is, and 62 of 220 exported calls threw while the JVM
 ;; suite stayed green.
 {:paths ["src" "resources" "test"]
- :deps {io.github.kotoba-lang/osaho
+ :deps {
+        ;; kotoba.test (clojure.test-compatible surface), not clojure.test --
+        ;; scripts/migrate-clojure-test-to-kotoba-test.cljk. Explicit floor.
+        io.github.kotoba-lang/test {:git/url "https://github.com/kotoba-lang/test.git"
+                                    :git/sha "2ab4885f99fd25552d380d0f6b0b54c5a72eb7ae"}io.github.kotoba-lang/osaho
         {:git/url "https://github.com/kotoba-lang/osaho.git"
          :git/sha "6d08e3cffa09c003f8dbcdfaee964c4a1ea021ad"}}}

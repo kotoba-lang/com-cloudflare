@@ -1,5 +1,5 @@
 (ns cloudflare.workers-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [cloudflare.workers :as workers]))
 
 (defn- stub-http-fn [body]
