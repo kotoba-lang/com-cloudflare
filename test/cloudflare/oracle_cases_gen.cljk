@@ -14,8 +14,8 @@
 ;; diff — a changed expectation is a changed decision.
 
 (ns cloudflare.oracle-cases-gen
-  (:require [clojure.java.io :as io]
-            [clojure.pprint :as pp]
+  (:require [kotoba.io :as io]
+            [kotoba.pprint :as pp]
             [cloudflare.oracle-cases :as cases])
   (:gen-class))
 
