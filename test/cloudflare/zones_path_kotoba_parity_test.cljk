@@ -3,7 +3,7 @@
 
 (ns cloudflare.zones-path-kotoba-parity-test
   (:require [kotoba.lang.text :as str]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [cloudflare.client :as client]
             [cloudflare.zones :as zones]
             [kotoba.compiler.core :as compiler]

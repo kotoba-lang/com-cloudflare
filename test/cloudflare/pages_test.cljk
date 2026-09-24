@@ -1,5 +1,5 @@
 (ns cloudflare.pages-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [cloudflare.pages :as pages]))
 
 (defn- stub-http-fn [body]

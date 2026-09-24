@@ -3,7 +3,7 @@
 
 (ns cloudflare.stream-kotoba-parity-test
   (:require [kotoba.lang.text :as str]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [cloudflare.stream :as stream]
             [kotoba.compiler.core :as compiler]
             [kotoba.kir :as ir]))

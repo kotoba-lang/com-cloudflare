@@ -1,5 +1,5 @@
 (ns cloudflare.logpush-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [cloudflare.logpush :as logpush]))
 
 (defn- stub-http-fn [body]

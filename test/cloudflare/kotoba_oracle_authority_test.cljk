@@ -7,7 +7,7 @@
   (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
             [kotoba.lang.text :as str]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [cloudflare.client :as client]
             [cloudflare.workers :as workers]
             [cloudflare.zones :as zones]

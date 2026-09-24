@@ -1,5 +1,5 @@
 (ns cloudflare.zones-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [cloudflare.zones :as zones]))
 
 (defn- stub-http-fn [body]

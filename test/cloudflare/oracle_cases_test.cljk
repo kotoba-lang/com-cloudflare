@@ -8,7 +8,7 @@
 
 (ns cloudflare.oracle-cases-test
   (:require [clojure.edn :as edn]
-            [clojure.test :refer [deftest is testing]]
+            [kotoba.test :refer [deftest is testing]]
             [cloudflare.oracle-cases :as cases]))
 
 (def ^:private table (delay (cases/read-cases)))
