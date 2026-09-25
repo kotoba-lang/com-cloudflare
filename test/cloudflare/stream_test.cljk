@@ -99,14 +99,14 @@
 
 (deftest create-live-output-request-refuses-an-output-that-could-never-connect
   (testing "an unknown platform resolves to no URL and is rejected, not silently posted"
-    (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+    (is (thrown? js/Error
                  (stream/create-live-output-request account "in1" {:platform :nicovideo :stream-key "k"}))))
-  (is (thrown? #?(:clj clojure.lang.ExceptionInfo :cljs js/Error)
+  (is (thrown? js/Error
                (stream/create-live-output-request account "in1" {:platform :youtube :stream-key "abcd\n"})))
   (testing "the thrown data carries the problems but never the key"
     (let [data (try (stream/create-live-output-request account "in1" {:platform :youtube :stream-key "secret \n"})
                     nil
-                    (catch #?(:clj clojure.lang.ExceptionInfo :cljs js/Error) e
+                    (catch js/Error e
                       (ex-data e)))]
       (is (= [:whitespace-in-key] (:problems data)))
       (is (not (str/includes? (str data) "secret "))))))

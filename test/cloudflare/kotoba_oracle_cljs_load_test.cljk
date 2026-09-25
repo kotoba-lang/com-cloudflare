@@ -3,7 +3,7 @@
 
 (ns cloudflare.kotoba-oracle-cljs-load-test
   (:require [clojure.edn :as edn]
-            [clojure.java.io :as io]
+            [kotoba.io :as io]
             [kotoba.test :refer [deftest is testing]]
             [cloudflare.client :as client]
             [cloudflare.kotoba.oracle :as oracle]
