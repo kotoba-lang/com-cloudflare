@@ -17,12 +17,11 @@
   | `wrangler-pages-deploy-argv` | host process-kit argv (optional ops shell) |
 
   Live helpers are JVM-only thin wrappers around `client/rest!` + plans."
-  (:require [kotoba.lang.text :as str]
+  (:require [kotoba.bytes :as kbytes] [kotoba.lang.text :as str]
             #?(:clj [cloudflare.client :as client])
             #?(:clj [json.data-json :as json])
             [cloudflare.kotoba.oracle :as oracle])
-  #?(:clj (:import (java.security MessageDigest)
-                   (java.util Base64))))
+  #?(:clj (:import (java.security MessageDigest))))
 
 (def ^:private oid :deploy)
 (def ^:private bulk-oid :pages-bulk)
@@ -165,7 +164,7 @@
   [s]
   #?(:clj
      (let [md (MessageDigest/getInstance "SHA-256")
-           bytes (.digest md (.getBytes ^String (str s) "UTF-8"))]
+           bytes (.digest md (kbytes/utf8-bytes ^String (str s)))]
        (apply str (map #(format "%02x" %) bytes)))
      :cljs
      (throw (ex-info "sha256-hex is JVM-only; pass :hash-fn to pages-asset-manifest"
@@ -174,7 +173,7 @@
 #?(:clj
 (defn- b64-utf8
   [s]
-  (.encodeToString (Base64/getEncoder) (.getBytes ^String (str s) "UTF-8"))))
+  (kbytes/base64-encode (kbytes/utf8-bytes ^String (str s)))))
 
 (defn pages-asset-manifest
   "Build path→hash manifest from `path->content` (string bodies).

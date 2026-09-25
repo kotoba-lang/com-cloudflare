@@ -28,7 +28,7 @@
   "Shared oracle case table + portable decode/normalize for the JVM and cljs gates."
   (:require [clojure.edn :as edn]
             [cloudflare.kotoba.oracle :as oracle]
-            #?(:clj [clojure.java.io :as io])))
+            #?(:clj [kotoba.io :as io])))
 
 (def ^:private cases-resource
   "Classpath path of the checked-in case table."
